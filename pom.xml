@@ -50,7 +50,7 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<lucene-analyzers-version>7.2.1</lucene-analyzers-version>
 		<logback-version>1.2.3</logback-version>
-		<logsentinel-client-version>0.2.6</logsentinel-client-version>
+		<logsentinel-client-version>0.2.7</logsentinel-client-version>
 	</properties>
 
 	<dependencies>
