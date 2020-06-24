@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ResultUtils {
+    
     public static List<String> getColumns(ResultSet result) throws SQLException {
         ResultSetMetaData metadata = result.getMetaData();
         List<String> columnNames = new ArrayList<>();

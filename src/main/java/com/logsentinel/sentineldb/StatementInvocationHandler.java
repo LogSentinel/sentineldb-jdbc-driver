@@ -2,16 +2,22 @@ package com.logsentinel.sentineldb;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.List;
 
 public class StatementInvocationHandler implements InvocationHandler {
     private Statement statement;
+    private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
     
-    StatementInvocationHandler(Statement statement, AuditLogService auditLogService) {
+    StatementInvocationHandler(Statement statement, ExternalEncryptionService encryptionService, 
+            AuditLogService auditLogService) {
         this.statement = statement;
+        this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
     }
     
@@ -28,8 +34,14 @@ public class StatementInvocationHandler implements InvocationHandler {
         } finally {
             if (query != null) {
                 if (result instanceof ResultSet) {
-                    List<String> columnNames = ResultUtils.getColumns((ResultSet) result);
+                    ResultSet resultSet = (ResultSet) result;
+                    List<String> columnNames = ResultUtils.getColumns(resultSet);
                     auditLogService.logQuery(query, columnNames);
+                    
+                    // wrapping the result in a decrypting proxy
+                    return Proxy.newProxyInstance(getClass().getClassLoader(), 
+                            new Class[] { ResultSet.class },
+                            new DecryptingResultSetInvocationHandler(resultSet, encryptionService));
                 } else {
                     auditLogService.logQuery(query);
                 }
@@ -37,4 +49,5 @@ public class StatementInvocationHandler implements InvocationHandler {
         }
         return result;
     }
+    
 }

@@ -51,7 +51,7 @@
 		<lucene-analyzers-version>7.2.1</lucene-analyzers-version>
 		<logback-version>1.2.3</logback-version>
 		<logsentinel-client-version>0.2.7</logsentinel-client-version>
-		<sentineldb-client-version>0.2.5</sentineldb-client-version>
+		<sentineldb-client-version>0.2.7</sentineldb-client-version>
 	</properties>
 
 	<dependencies>

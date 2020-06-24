@@ -10,10 +10,12 @@ import java.sql.Statement;
 
 public class ConnectionInvocationHandler implements InvocationHandler {
     private Connection connection;
+    private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
     
-    ConnectionInvocationHandler(Connection connection, AuditLogService auditLogService) {
+    ConnectionInvocationHandler(Connection connection, ExternalEncryptionService encryptionService, AuditLogService auditLogService) {
         this.connection = connection;
+        this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
     }
     
@@ -23,11 +25,12 @@ public class ConnectionInvocationHandler implements InvocationHandler {
         if (method.getReturnType() == Statement.class) {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] { Statement.class }, 
-                    new StatementInvocationHandler((Statement) result, auditLogService));
+                    new StatementInvocationHandler((Statement) result, encryptionService, auditLogService));
         } else if (method.getReturnType() == PreparedStatement.class || method.getReturnType() == CallableStatement.class) {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] { method.getReturnType() },
-                    new PreparedStatementInvocationHandler((PreparedStatement) result, (String) args[0], auditLogService));
+                    new PreparedStatementInvocationHandler((PreparedStatement) result, (String) args[0], 
+                            encryptionService, auditLogService));
         }
         return result;
     }

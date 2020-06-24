@@ -9,6 +9,7 @@ import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.logging.Logger;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -26,6 +27,9 @@ import org.apache.commons.lang3.ArrayUtils;
  */
 public class SentinelDBDriver implements Driver {
     
+    private static final String SENTINELDB_ORGANIZATION_ID = "sentineldbOrganizationId";
+    private static final String SENTINELDB_SECRET = "sentineldbSecret";
+    private static final String SENTINELDB_DATASTORE_ID = "sentineldbDatastoreId";
     private static final String ACTOR_EXTRACTION_FUNCTION = "actorExtractionFunction";
     private static final String TRAILS_APPLICATION_ID = "trailsApplicationId";
     private static final String TRAILS_SECRET = "trailsSecret";
@@ -65,10 +69,19 @@ public class SentinelDBDriver implements Driver {
                 info.getProperty(TRAILS_APPLICATION_ID),
                 info.getProperty(TRAILS_URL),
                 actorExtractionMethod);
+        auditLogService.init();
+        
+        ExternalEncryptionService encryptionService = new ExternalEncryptionService(
+                info.getProperty(SENTINELDB_ORGANIZATION_ID), 
+                info.getProperty(SENTINELDB_SECRET),
+                UUID.fromString(info.getProperty(SENTINELDB_DATASTORE_ID)));
+        encryptionService.init();
+        
         
         return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
                 new Class[] {Connection.class}, 
-                new ConnectionInvocationHandler(delegatedDriver.connect(delegatedUrl, info), auditLogService));
+                new ConnectionInvocationHandler(delegatedDriver.connect(delegatedUrl, info), 
+                        encryptionService, auditLogService));
     }
 
     @Override
@@ -92,7 +105,12 @@ public class SentinelDBDriver implements Driver {
         DriverPropertyInfo appIdProperty = new DriverPropertyInfo(TRAILS_APPLICATION_ID, null);
         DriverPropertyInfo urlProperty = new DriverPropertyInfo(TRAILS_URL, null);
         DriverPropertyInfo userExtractionFunctionProperty = new DriverPropertyInfo(ACTOR_EXTRACTION_FUNCTION, null);
-        ArrayUtils.addAll(result, orgIdProperty, orgSecretProperty, appIdProperty, urlProperty, userExtractionFunctionProperty);
+        DriverPropertyInfo dbOrgIdProperty = new DriverPropertyInfo(SENTINELDB_ORGANIZATION_ID, null);
+        DriverPropertyInfo dbSecretProperty = new DriverPropertyInfo(SENTINELDB_SECRET, null);
+        DriverPropertyInfo dbDatastoreIdProperty = new DriverPropertyInfo(SENTINELDB_DATASTORE_ID, null);
+        ArrayUtils.addAll(result, orgIdProperty, orgSecretProperty, appIdProperty, urlProperty, 
+                userExtractionFunctionProperty, 
+                dbOrgIdProperty, dbSecretProperty, dbDatastoreIdProperty);
         return result;
     }
 
