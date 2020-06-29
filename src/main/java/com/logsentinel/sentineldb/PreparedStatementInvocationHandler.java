@@ -7,25 +7,31 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.List;
 
+import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
+
 public class PreparedStatementInvocationHandler implements InvocationHandler {
     private PreparedStatement preparedStatement;
     private String query;
     private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
-
+    private SqlParseResult parseResult;
+    
     public PreparedStatementInvocationHandler(PreparedStatement preparedStatement, String query, 
-            ExternalEncryptionService encryptionService, AuditLogService auditLogService) {
+            ExternalEncryptionService encryptionService, AuditLogService auditLogService, SqlParser sqlParser) {
         this.preparedStatement = preparedStatement;
         this.query = query;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
+        this.parseResult = sqlParser.parse(query);
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         Object result = null;
-        //QueryParser
         try {
+            if (method.getName().equals("setString")) {
+                
+            }
             result = method.invoke(preparedStatement, args);
         } finally {
             if (query != null && method.getName().startsWith("execute")) {

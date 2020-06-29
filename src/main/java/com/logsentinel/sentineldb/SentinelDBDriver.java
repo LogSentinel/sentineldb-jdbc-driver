@@ -81,7 +81,7 @@ public class SentinelDBDriver implements Driver {
         return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
                 new Class[] {Connection.class}, 
                 new ConnectionInvocationHandler(delegatedDriver.connect(delegatedUrl, info), 
-                        encryptionService, auditLogService));
+                        encryptionService, auditLogService, new SqlParser()));
     }
 
     @Override
