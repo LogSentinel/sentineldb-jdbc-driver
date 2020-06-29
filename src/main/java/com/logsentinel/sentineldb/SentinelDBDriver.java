@@ -55,7 +55,7 @@ public class SentinelDBDriver implements Driver {
         
         String actorFunctionFQN = info.getProperty(ACTOR_EXTRACTION_FUNCTION);
         Method actorExtractionMethod = null;
-        if (actorFunctionFQN != null && !actorFunctionFQN.isBlank()) {
+        if (actorFunctionFQN != null && !actorFunctionFQN.isEmpty()) {
             try {
                 String[] parts = actorFunctionFQN.split("::");
                 actorExtractionMethod = Class.forName(parts[0]).getDeclaredMethod(parts[1]);

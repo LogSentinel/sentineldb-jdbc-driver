@@ -1,7 +1,10 @@
 package com.logsentinel.sentineldb;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import net.sf.jsqlparser.JSQLParserException;
@@ -19,6 +22,9 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.insert.Insert;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.SelectExpressionItem;
+import net.sf.jsqlparser.statement.select.SelectItemVisitor;
+import net.sf.jsqlparser.statement.select.SelectItemVisitorAdapter;
 import net.sf.jsqlparser.statement.select.SelectVisitorAdapter;
 import net.sf.jsqlparser.statement.update.Update;
 
@@ -75,7 +81,7 @@ public class SqlParser {
             }
         }
         
-        update.getWhere().accept(new WhereExpressionVisitor(result));
+        update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap()));
         
         return result;
     }
@@ -117,14 +123,31 @@ public class SqlParser {
 
         @Override
         public void visit(PlainSelect plainSelect) {
-            plainSelect.getWhere().accept(new WhereExpressionVisitor(result));
+            Map<String, String> aliases = new HashMap<>();
+            SelectItemVisitor visitor = new SelectItemVisitorAdapter() {
+                @Override
+                public void visit(SelectExpressionItem item) {
+                    Expression expr = item.getExpression();
+                    if (expr instanceof Column) {
+                        Column column = (Column) expr;
+                        if (item.getAlias() != null) {
+                            aliases.put(item.getAlias().getName(), column.getColumnName());
+                        }
+                    }
+                }
+            };
+            
+            plainSelect.getSelectItems().forEach(si -> si.accept(visitor));
+            plainSelect.getWhere().accept(new WhereExpressionVisitor(result, aliases));
         }
     }
     
     public static class WhereExpressionVisitor extends ExpressionVisitorAdapter {
         private SqlParseResult result;
-        public WhereExpressionVisitor(SqlParseResult result) {
+        private Map<String, String> aliases;
+        public WhereExpressionVisitor(SqlParseResult result, Map<String, String> aliases) {
             this.result = result;
+            this.aliases = aliases;
         }
 
         @Override
@@ -138,14 +161,19 @@ public class SqlParser {
             if (expr.getRightExpression() instanceof StringValue) {
                 StringValue valueWrapper = (StringValue) expr.getRightExpression();
                 String value = valueWrapper.getValue();
-                result.getWhereColumns().add(value);
+                result.getWhereValues().add(value);
                 
                 if (expr.getLeftExpression() instanceof Column) {
                     Column column = (Column) expr.getLeftExpression();
                     String columnName = column.getColumnName();
+                    if (aliases.containsKey(columnName)) {
+                        columnName = aliases.get(columnName);
+                    }
                     result.getWhereColumns().add(columnName);
                 }
+                
             }
+            // TODO MySQL in standard mode uses " for strings and not for objects as in ANSI_SQL mode, so handle that
         }
     }
     
