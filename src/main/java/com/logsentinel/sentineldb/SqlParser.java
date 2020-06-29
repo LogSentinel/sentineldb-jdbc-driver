@@ -3,6 +3,7 @@ package com.logsentinel.sentineldb;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -18,14 +19,17 @@ import net.sf.jsqlparser.expression.operators.relational.ItemsList;
 import net.sf.jsqlparser.expression.operators.relational.ItemsListVisitorAdapter;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.insert.Insert;
+import net.sf.jsqlparser.statement.select.FromItemVisitorAdapter;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItemVisitor;
 import net.sf.jsqlparser.statement.select.SelectItemVisitorAdapter;
 import net.sf.jsqlparser.statement.select.SelectVisitorAdapter;
+import net.sf.jsqlparser.statement.select.SubSelect;
 import net.sf.jsqlparser.statement.update.Update;
 
 public class SqlParser {
@@ -61,7 +65,8 @@ public class SqlParser {
 
     public SqlParseResult handleSelect(Statement stm) {
         SqlParseResult result = new SqlParseResult();
-        ((Select) stm).getSelectBody().accept(new SelectClauseVisitor(result));
+        Select select = (Select) stm;
+        select.getSelectBody().accept(new SelectClauseVisitor(result));
         return result;
         
     }
@@ -71,7 +76,6 @@ public class SqlParser {
         
         Update update = (Update) stm;
         List<Column> columns = update.getColumns();
-        result.getColumns().addAll(columns.stream().map(Column::getColumnName).collect(Collectors.toList()));
         
         List<Expression> expressions = update.getExpressions();
         List<String> values = new ArrayList<>();
@@ -81,7 +85,12 @@ public class SqlParser {
             }
         }
         
-        update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap()));
+        Iterator<String> valuesIterator = values.iterator();
+        result.getColumns().addAll(columns.stream()
+                .map(c -> new TableColumn(update.getTable().getName(), c.getColumnName(), valuesIterator.next()))
+                .collect(Collectors.toList()));
+        
+        update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), update.getTable().getName()));
         
         return result;
     }
@@ -110,8 +119,10 @@ public class SqlParser {
             }
         });
         
-        result.setColumns(columns.stream().map(Column::getColumnName).collect(Collectors.toList()));
-        result.setValues(values);
+        Iterator<String> valuesIterator = values.iterator();
+        result.getColumns().addAll(columns.stream()
+                .map(c -> new TableColumn(insert.getTable().getName(), c.getColumnName(), valuesIterator.next()))
+                .collect(Collectors.toList()));
         return result;
     }
     
@@ -124,6 +135,7 @@ public class SqlParser {
         @Override
         public void visit(PlainSelect plainSelect) {
             Map<String, String> aliases = new HashMap<>();
+            StringBuilder tableNameBuilder = new StringBuilder();
             SelectItemVisitor visitor = new SelectItemVisitorAdapter() {
                 @Override
                 public void visit(SelectExpressionItem item) {
@@ -136,18 +148,34 @@ public class SqlParser {
                     }
                 }
             };
-            
+            plainSelect.getFromItem().accept(new FromItemVisitorAdapter() {
+                @Override
+                public void visit(Table table) {
+                    tableNameBuilder.append(table.getName());
+                }
+                
+                @Override
+                public void visit(SubSelect subSelect) {
+                    subSelect.getSelectBody().accept(new SelectClauseVisitor(result));
+                }
+            });
             plainSelect.getSelectItems().forEach(si -> si.accept(visitor));
-            plainSelect.getWhere().accept(new WhereExpressionVisitor(result, aliases));
+            
+            Expression where = plainSelect.getWhere();
+            if (where != null) {
+                where.accept(new WhereExpressionVisitor(result, aliases, tableNameBuilder.toString()));
+            }
         }
     }
     
     public static class WhereExpressionVisitor extends ExpressionVisitorAdapter {
         private SqlParseResult result;
         private Map<String, String> aliases;
-        public WhereExpressionVisitor(SqlParseResult result, Map<String, String> aliases) {
+        private String tableName;
+        public WhereExpressionVisitor(SqlParseResult result, Map<String, String> aliases, String tableName) {
             this.result = result;
             this.aliases = aliases;
+            this.tableName = tableName;
         }
 
         @Override
@@ -161,7 +189,6 @@ public class SqlParser {
             if (expr.getRightExpression() instanceof StringValue) {
                 StringValue valueWrapper = (StringValue) expr.getRightExpression();
                 String value = valueWrapper.getValue();
-                result.getWhereValues().add(value);
                 
                 if (expr.getLeftExpression() instanceof Column) {
                     Column column = (Column) expr.getLeftExpression();
@@ -169,7 +196,7 @@ public class SqlParser {
                     if (aliases.containsKey(columnName)) {
                         columnName = aliases.get(columnName);
                     }
-                    result.getWhereColumns().add(columnName);
+                    result.getWhereColumns().add(new TableColumn(tableName, columnName, value));
                 }
                 
             }
@@ -178,34 +205,53 @@ public class SqlParser {
     }
     
     public static class SqlParseResult {
-        private List<String> columns = new ArrayList<>();
-        private List<String> values = new ArrayList<>();
-        private List<String> whereColumns = new ArrayList<>();
-        private List<String> whereValues = new ArrayList<>();
+        private List<TableColumn> columns = new ArrayList<>();
+        private List<TableColumn> whereColumns = new ArrayList<>();
         
-        public List<String> getColumns() {
+        public List<TableColumn> getColumns() {
             return columns;
         }
-        public void setColumns(List<String> columns) {
+        public void setColumns(List<TableColumn> columns) {
             this.columns = columns;
         }
-        public List<String> getValues() {
-            return values;
-        }
-        public void setValues(List<String> values) {
-            this.values = values;
-        }
-        public List<String> getWhereColumns() {
+        public List<TableColumn> getWhereColumns() {
             return whereColumns;
         }
-        public void setWhereColumns(List<String> whereColumns) {
+        public void setWhereColumns(List<TableColumn> whereColumns) {
             this.whereColumns = whereColumns;
         }
-        public List<String> getWhereValues() {
-            return whereValues;
+    }
+    
+    public static class TableColumn {
+        private String columName;
+        private String tableName;
+        private String value;
+        
+        public TableColumn(String tableName, String columName, String value) {
+            this.tableName = tableName;
+            this.columName = columName;
+            this.value = value;
         }
-        public void setWhereValues(List<String> whereValues) {
-            this.whereValues = whereValues;
+        
+        public String getColumName() {
+            return columName;
+        }
+        public void setColumName(String columName) {
+            this.columName = columName;
+        }
+        public String getTableName() {
+            return tableName;
+        }
+        public void setTableName(String tableName) {
+            this.tableName = tableName;
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
         }
     }
 }
