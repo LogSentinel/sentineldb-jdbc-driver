@@ -253,5 +253,10 @@ public class SqlParser {
         public void setValue(String value) {
             this.value = value;
         }
+
+        @Override
+        public String toString() {
+            return "TableColumn [columName=" + columName + ", tableName=" + tableName + ", value=" + value + "]";
+        }
     }
 }
