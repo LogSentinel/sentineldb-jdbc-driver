@@ -60,12 +60,12 @@
 			<artifactId>logsentinel-java-client</artifactId>
 			<version>${logsentinel-client-version}</version>
 		</dependency>
-        <dependency>
-            <groupId>com.logsentinel.sentineldb</groupId>
-            <artifactId>sentineldb-java-client</artifactId>
-            <version>${sentineldb-client-version}</version>
-        </dependency>
-        
+		<dependency>
+			<groupId>com.logsentinel.sentineldb</groupId>
+			<artifactId>sentineldb-java-client</artifactId>
+			<version>${sentineldb-client-version}</version>
+		</dependency>
+
 		<!-- HTTP client: jersey-client -->
 		<dependency>
 			<groupId>org.glassfish.jersey.core</groupId>
@@ -121,11 +121,8 @@
 			<version>3.1</version>
 		</dependency>
 
-		<!-- <dependency>
-			<groupId>org.teiid</groupId>
-			<artifactId>teiid-engine</artifactId>
-			<version>14.0.0</version>
-		</dependency> -->
+		<!-- <dependency> <groupId>org.teiid</groupId> <artifactId>teiid-engine</artifactId> 
+			<version>14.0.0</version> </dependency> -->
 
 
 
@@ -162,6 +159,12 @@
 			<artifactId>commons-lang3</artifactId>
 			<version>3.7</version>
 		</dependency>
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<version>1.4.200</version>
+		</dependency>
+
 
 		<dependency>
 			<groupId>org.bouncycastle</groupId>
