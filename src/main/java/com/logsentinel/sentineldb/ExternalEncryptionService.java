@@ -48,10 +48,16 @@ public class ExternalEncryptionService {
     }
     
     public String encryptString(String plaintext, String tableName, String columnName, Object id) {
+        plaintext = extendPlaintext(plaintext);
         ExternalEncryptionResult result = sentinelDBClient.getExternalEncryptionActions().encryptData(datastoreId, String.valueOf(id), tableName, columnName, plaintext);
         return ENCRYPTED_FIELD_PREFIX + tableName + ":" + id + ":" + result.getCiphertext();
     }
     
+    private String extendPlaintext(String plaintext) {
+        // TODO extend the plaintext with either salt or a configurable/generated-once value, in case it's to small, which would risk its privacy
+        return plaintext;
+    }
+
     public boolean isEncrypted(String enrichedCiphertext) {
         return enrichedCiphertext.startsWith(ENCRYPTED_FIELD_PREFIX);
     }

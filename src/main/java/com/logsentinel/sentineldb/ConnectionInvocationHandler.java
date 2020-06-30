@@ -28,12 +28,12 @@ public class ConnectionInvocationHandler implements InvocationHandler {
         if (method.getReturnType() == Statement.class) {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] { Statement.class }, 
-                    new StatementInvocationHandler((Statement) result, encryptionService, auditLogService));
+                    new StatementInvocationHandler((Statement) result, encryptionService, auditLogService, sqlParser));
         } else if (method.getReturnType() == PreparedStatement.class || method.getReturnType() == CallableStatement.class) {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] { method.getReturnType() },
                     new PreparedStatementInvocationHandler((PreparedStatement) result, (String) args[0], 
-                            encryptionService, auditLogService));
+                            encryptionService, auditLogService, sqlParser));
         }
         return result;
     }
