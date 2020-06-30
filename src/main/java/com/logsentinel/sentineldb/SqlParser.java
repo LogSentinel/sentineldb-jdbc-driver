@@ -23,6 +23,7 @@ import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.insert.Insert;
 import net.sf.jsqlparser.statement.select.FromItemVisitorAdapter;
+import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
@@ -148,6 +149,19 @@ public class SqlParser {
                     }
                 }
             };
+            
+            for (Join join : plainSelect.getJoins()) {
+                if (join.getRightItem().getAlias() != null) {
+                    StringBuilder joinTableNameBuilder = new StringBuilder();
+                    join.getRightItem().accept(new FromItemVisitorAdapter() {
+                        @Override
+                        public void visit(Table table) {
+                            joinTableNameBuilder.append(table.getName());
+                        }
+                    });
+                    aliases.put(join.getRightItem().getAlias().getName(), joinTableNameBuilder.toString());
+                }
+            }
             plainSelect.getFromItem().accept(new FromItemVisitorAdapter() {
                 @Override
                 public void visit(Table table) {
@@ -196,7 +210,14 @@ public class SqlParser {
                     if (aliases.containsKey(columnName)) {
                         columnName = aliases.get(columnName);
                     }
-                    result.getWhereColumns().add(new TableColumn(tableName, columnName, value));
+                    String currentTableName = tableName;
+                    if (column.getTable() != null && column.getTable().getName() != null) {
+                        currentTableName = column.getTable().getName();
+                    }
+                    if (aliases.containsKey(currentTableName)) {
+                        currentTableName = aliases.get(currentTableName); 
+                    }
+                    result.getWhereColumns().add(new TableColumn(currentTableName, columnName, value));
                 }
                 
             }

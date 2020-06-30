@@ -41,6 +41,15 @@ public class SqlParserTest {
     }
     
     @Test
+    public void selectWithAliasedJoinsTest() {
+        SqlParseResult result = parser.parse("SELECT * FROM table JOIN table2 as t2 ON table.id = table2.other_id WHERE table.column1='c1' AND t2.column2='c2'");
+        assertThat(getList(result.getWhereColumns(), TableColumn::getColumName), hasItems("column1", "column2"));
+        assertThat(getList(result.getWhereColumns(), TableColumn::getValue), hasItems("c1", "c2"));
+        assertThat(getList(result.getWhereColumns(), TableColumn::getTableName), hasItems("table", "table2"));
+        assertThat(result.getColumns().isEmpty(), equalTo(true));
+    }
+    
+    @Test
     public void insertTest() {
         SqlParseResult result = parser.parse("INSERT INTO table (col1, col2) VALUES ('val1', 'val2')");
         assertThat(getList(result.getColumns(), TableColumn::getColumName), hasItems("col1", "col2"));
