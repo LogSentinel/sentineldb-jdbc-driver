@@ -1,4 +1,4 @@
-package com.logsentinel.sentineldb;
+package com.logsentinel.sentineldb.proxies;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -7,6 +7,11 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+
+import com.logsentinel.sentineldb.AuditLogService;
+import com.logsentinel.sentineldb.ExternalEncryptionService;
+import com.logsentinel.sentineldb.LookupManager;
+import com.logsentinel.sentineldb.SqlParser;
 
 public class ConnectionInvocationHandler implements InvocationHandler {
     private Connection connection;

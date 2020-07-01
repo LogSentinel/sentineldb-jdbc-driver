@@ -25,6 +25,7 @@ import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.delete.Delete;
 import net.sf.jsqlparser.statement.insert.Insert;
 import net.sf.jsqlparser.statement.select.FromItemVisitorAdapter;
 import net.sf.jsqlparser.statement.select.Join;
@@ -57,6 +58,8 @@ public class SqlParser {
                 return handleInsert(stm);
             } else if (stm instanceof Update) {
                 return handleUpdate(stm, sqlStatement);
+            } else if (stm instanceof Delete) {
+                return handleDelete(stm);
             } else {
                 System.out.println("Unrecognized statement of type " + stm.getClass());
                 return null;
@@ -66,6 +69,13 @@ public class SqlParser {
             return null;
         }
             
+    }
+
+    private SqlParseResult handleDelete(Statement stm) {
+        Delete delete = (Delete) stm;
+        SqlParseResult result = new SqlParseResult();
+        delete.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), delete.getTable().getName(), idColumns));
+        return result;
     }
 
     public SqlParseResult handleSelect(Statement stm) {

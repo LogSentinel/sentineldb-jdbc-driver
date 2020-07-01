@@ -18,6 +18,8 @@ import java.util.logging.Logger;
 
 import org.apache.commons.lang3.ArrayUtils;
 
+import com.logsentinel.sentineldb.proxies.ConnectionInvocationHandler;
+
 /**
  * A driver proxy that gets registered by simply adding the sentineldb: prefix in the connection string, e.g.:
  * jdbc:sentineldb:mysql://HOST

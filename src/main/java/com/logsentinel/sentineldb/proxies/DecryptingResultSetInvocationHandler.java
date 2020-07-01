@@ -1,8 +1,10 @@
-package com.logsentinel.sentineldb;
+package com.logsentinel.sentineldb.proxies;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.sql.ResultSet;
+
+import com.logsentinel.sentineldb.ExternalEncryptionService;
 
 public class DecryptingResultSetInvocationHandler implements InvocationHandler {
 

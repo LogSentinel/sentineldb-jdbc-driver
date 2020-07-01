@@ -1,4 +1,4 @@
-package com.logsentinel.sentineldb;
+package com.logsentinel.sentineldb.proxies;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -8,7 +8,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
+import com.logsentinel.sentineldb.AuditLogService;
+import com.logsentinel.sentineldb.ExternalEncryptionService;
+import com.logsentinel.sentineldb.LookupManager;
+import com.logsentinel.sentineldb.ResultUtils;
+import com.logsentinel.sentineldb.SqlParser;
 import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
 import com.logsentinel.sentineldb.SqlParser.TableColumn;
 
@@ -39,13 +45,15 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         try {
             if (method.getName().equals("setString")) {
                 TableColumn column = indexedParamColumns.get((int) args[0]);
+                // in case the parameter is in the where clause, set the value to the lookup key
+                // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
                 if (column.isWhereClause()) {
-                    args[0] = encryptionService.getLookupKey((String) args[1]);
+                    args[1] = encryptionService.getLookupKey((String) args[1]);
                 } else {
-                    args[0] = encryptionService.encryptString((String) args[1], 
+                    args[1] = encryptionService.encryptString((String) args[1], 
                             column.getTableName(), 
-                            column.getTableName(), 
-                            parseResult.getIds().iterator().next()); // TODO what about multiple IDs?
+                            column.getColumName(), 
+                            UUID.randomUUID()); // check extended comment in StatementInvocationHandler
                 }
             }
             result = method.invoke(preparedStatement, args);

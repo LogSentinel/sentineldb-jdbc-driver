@@ -76,7 +76,7 @@ public class LookupManager {
         }
     }
 
-    public void storeLookup(List<String> list, String table, String column, Connection connection) throws SQLException {
+    public void storeLookup(List<String> lookupKeys, String table, String column, Connection connection) throws SQLException {
         try (Statement stm = connection.createStatement()) {
             
         }
