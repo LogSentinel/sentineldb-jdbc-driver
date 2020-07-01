@@ -1,10 +1,8 @@
 package com.logsentinel.sentineldb;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,7 +18,7 @@ import java.util.UUID;
  */
 public class LookupManager {
 
-    public void initLookup(Connection connection) {
+    public void initLookup(Connection connection, List<String> tables) {
         try {
             Statement stm = connection.createStatement();
             try {
@@ -30,42 +28,11 @@ public class LookupManager {
                 stm.executeUpdate("CREATE TABLE sentineldb_lookup (lookup_key VARCHAR(200) PRIMARY KEY, target_id VARCHAR(100), target_id_type VARCHAR(5)");
             }
             
-            List<String> tables = listTables(connection, stm);
             appendRecordIdColumn(tables, connection);
             appendLookupColumn(tables, connection);
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    }
-    
-    
-    private List<String> listTables(Connection connection, Statement stm) throws SQLException {
-        String database = connection.getMetaData().getDatabaseProductName();
-        List<String> result = new ArrayList<>();
-        // if is more readable than switch
-        if (database.equals("MySQL") || database.equals("MariaDB")) {
-            ResultSet rs = stm.executeQuery("SHOW TABLES");
-            while (rs.next()) {
-                result.add(rs.getString(1));
-            }
-        } else if (database.equals("PostgreSQL")) {
-            ResultSet rs = stm.executeQuery("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
-            while (rs.next()) {
-                result.add(rs.getString(1));
-            }
-        } else if (database.equals("Microsoft SQL Server")) {
-            // TODO
-        } else if (database.equals("Oracle")) {
-            // TODO
-        } else if (database.equals("Sybase Anywhere")) {
-            
-        } else if (database.equals("Informix Dynamic Server")) {
-            
-        } else if (database.equals("SQLite")) {
-            
-        } // TODO DB2, Firebird, Ingres, Apache Derby, H2
-        // TODO extract enum with database names
-        return result;
     }
     
     private void appendLookupColumn(List<String> tables, Connection connection) {

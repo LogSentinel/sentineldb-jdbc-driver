@@ -6,8 +6,12 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.DriverPropertyInfo;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -77,13 +81,36 @@ public class SentinelDBDriver implements Driver {
                 UUID.fromString(info.getProperty(SENTINELDB_DATASTORE_ID)));
         encryptionService.init();
         
-        
-        return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
-                new Class[] {Connection.class}, 
-                new ConnectionInvocationHandler(delegatedDriver.connect(delegatedUrl, info), 
-                        encryptionService, auditLogService, new SqlParser()));
+        Connection connection = delegatedDriver.connect(delegatedUrl, info);
+        try (Statement stm = connection.createStatement()) {
+            // TODO periodically reload table data if we assume database changes can happen without an application restart?
+            List<String> tables = listTables(stm);
+            
+            return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
+                    new Class[] {Connection.class}, 
+                    new ConnectionInvocationHandler(connection, encryptionService, auditLogService, new SqlParser(tables)));
+        }
     }
 
+    private List<String> listTables(Statement stm) throws SQLException {
+        String database = stm.getConnection().getMetaData().getDatabaseProductName();
+        List<String> result = new ArrayList<>();
+        // if is more readable than switch
+        DatabaseType databaseType = DatabaseType.findByName(database);
+        if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
+            ResultSet rs = stm.executeQuery("SHOW TABLES");
+            while (rs.next()) {
+                result.add(rs.getString(1));
+            }
+        } else if (databaseType == DatabaseType.POSTGRESQL) {
+            ResultSet rs = stm.executeQuery("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+            while (rs.next()) {
+                result.add(rs.getString(1));
+            }
+        } // TODO 
+        return result;
+    }
+    
     @Override
     public boolean acceptsURL(String url) throws SQLException {
         if (!url.contains(CONNECTION_STRING_PREFIX)) {

@@ -31,7 +31,7 @@ public class StatementInvocationHandler implements InvocationHandler {
         String query = null;
         if (method.getName().equals("addBatch") || method.getName().equals("executeUpdate") || method.getName().equals("executeQuery")) {
             query = (String) args[0];
-            SqlParseResult parseResult = sqlParser.parse(query);
+            SqlParseResult parseResult = sqlParser.parse(query, statement.getConnection());
             UUID encryptionRecordId = UUID.randomUUID();
             
             for (TableColumn column : parseResult.getColumns()) {

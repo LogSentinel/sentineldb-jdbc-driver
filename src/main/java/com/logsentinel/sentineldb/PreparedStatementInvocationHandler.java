@@ -5,6 +5,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 
 import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
@@ -17,12 +18,12 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
     private SqlParseResult parseResult;
     
     public PreparedStatementInvocationHandler(PreparedStatement preparedStatement, String query, 
-            ExternalEncryptionService encryptionService, AuditLogService auditLogService, SqlParser sqlParser) {
+            ExternalEncryptionService encryptionService, AuditLogService auditLogService, SqlParser sqlParser) throws SQLException {
         this.preparedStatement = preparedStatement;
         this.query = query;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
-        this.parseResult = sqlParser.parse(query);
+        this.parseResult = sqlParser.parse(query, preparedStatement.getConnection());
     }
 
     @Override

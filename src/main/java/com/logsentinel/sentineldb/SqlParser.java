@@ -1,5 +1,8 @@
 package com.logsentinel.sentineldb;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -11,6 +14,7 @@ import java.util.stream.Collectors;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
+import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
@@ -35,29 +39,29 @@ import net.sf.jsqlparser.statement.update.Update;
 
 public class SqlParser {
 
-    /**
-     * cases:
-     * INSERT INTO x VALUES (...);
-     * INSERT INTO x (y,z) VALUES (..);
-     * UPDATE x SET y=z
-     * any query with WHERE x=y
-     * any query with WHERE x iN (..)
-     */
+    // TODO change to guava with expiry
+    private Map<String, String> idColumns = new HashMap<>(); 
+    private List<String> tables;
     
-    public SqlParseResult parse(String query) {
-        try {
+    public SqlParser(List<String> tables) {
+        this.tables = tables;
+    }
+
+    public SqlParseResult parse(String query, Connection connection) {
+        try (java.sql.Statement sqlStatement = connection.createStatement()) {
             Statement stm = CCJSqlParserUtil.parse(query);
+            
             if (stm instanceof Select) {
                 return handleSelect(stm);
             } else if (stm instanceof Insert) {
                 return handleInsert(stm);
             } else if (stm instanceof Update) {
-                return handleUpdate(stm);
+                return handleUpdate(stm, sqlStatement);
             } else {
                 System.out.println("Unrecognized statement of type " + stm.getClass());
                 return null;
             }
-        } catch (JSQLParserException e) {
+        } catch (JSQLParserException | SQLException e) {
             e.printStackTrace();
             return null;
         }
@@ -67,13 +71,21 @@ public class SqlParser {
     public SqlParseResult handleSelect(Statement stm) {
         SqlParseResult result = new SqlParseResult();
         Select select = (Select) stm;
-        select.getSelectBody().accept(new SelectClauseVisitor(result));
+        select.getSelectBody().accept(new SelectClauseVisitor(result, idColumns));
         return result;
         
     }
 
-    public SqlParseResult handleUpdate(Statement stm) {
+    public SqlParseResult handleUpdate(Statement stm, java.sql.Statement sqlStatement) throws SQLException {
         SqlParseResult result = new SqlParseResult();
+        
+        if (idColumns.isEmpty()) {
+            synchronized (this) {
+                if (idColumns.isEmpty()) {
+                    loadIdColumns(sqlStatement);
+                }
+            }
+        }
         
         Update update = (Update) stm;
         List<Column> columns = update.getColumns();
@@ -90,10 +102,30 @@ public class SqlParser {
         result.getColumns().addAll(columns.stream()
                 .map(c -> new TableColumn(update.getTable().getName(), c.getColumnName(), valuesIterator.next()))
                 .collect(Collectors.toList()));
+
         
-        update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), update.getTable().getName()));
+        update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), update.getTable().getName(), idColumns));
         
         return result;
+    }
+
+    private void loadIdColumns(java.sql.Statement sqlStatement) throws SQLException {
+        String database = sqlStatement.getConnection().getMetaData().getDatabaseProductName();
+        DatabaseType databaseType = DatabaseType.findByName(database);
+        
+        for (String tableName : tables) {
+            if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
+                ResultSet rs = sqlStatement.executeQuery("DESCRIBE " + tableName);
+                while (rs.next()) {
+                    // TODO composite IDs?
+                    if ("PRI".equals(rs.getString("Key"))) {
+                        idColumns.put(tableName, rs.getString("Field"));
+                    }
+                }
+            } else if (databaseType == DatabaseType.POSTGRESQL) {
+                
+            } // TODO
+        }
     }
 
     public SqlParseResult handleInsert(Statement stm) {
@@ -129,8 +161,10 @@ public class SqlParser {
     
     public static class SelectClauseVisitor extends SelectVisitorAdapter {
         private SqlParseResult result;
-        public SelectClauseVisitor(SqlParseResult result) {
+        private Map<String, String> idColumns;
+        public SelectClauseVisitor(SqlParseResult result, Map<String, String> idColumns) {
             this.result = result;
+            this.idColumns = idColumns;
         }
 
         @Override
@@ -170,14 +204,14 @@ public class SqlParser {
                 
                 @Override
                 public void visit(SubSelect subSelect) {
-                    subSelect.getSelectBody().accept(new SelectClauseVisitor(result));
+                    subSelect.getSelectBody().accept(new SelectClauseVisitor(result, idColumns));
                 }
             });
             plainSelect.getSelectItems().forEach(si -> si.accept(visitor));
             
             Expression where = plainSelect.getWhere();
             if (where != null) {
-                where.accept(new WhereExpressionVisitor(result, aliases, tableNameBuilder.toString()));
+                where.accept(new WhereExpressionVisitor(result, aliases, tableNameBuilder.toString(), idColumns));
             }
         }
     }
@@ -186,10 +220,12 @@ public class SqlParser {
         private SqlParseResult result;
         private Map<String, String> aliases;
         private String tableName;
-        public WhereExpressionVisitor(SqlParseResult result, Map<String, String> aliases, String tableName) {
+        private Map<String, String> idColumns;
+        public WhereExpressionVisitor(SqlParseResult result, Map<String, String> aliases, String tableName, Map<String, String> idColumns) {
             this.result = result;
             this.aliases = aliases;
             this.tableName = tableName;
+            this.idColumns = idColumns;
         }
 
         @Override
@@ -200,16 +236,29 @@ public class SqlParser {
         @Override
         public void visit(EqualsTo expr) {
             // only handle String fields for now
+            
+            if (idColumns.containsKey(tableName)) {
+                String idColumnName = idColumns.get(tableName);
+                if (expr.getLeftExpression() instanceof Column) {
+                    Column column = (Column) expr.getLeftExpression();
+                    String columnName = getColumnName(column);
+                    if (columnName.equals(idColumnName)) {
+                        if (expr.getRightExpression() instanceof StringValue) {
+                            result.setId(((StringValue) expr.getRightExpression()).getValue());
+                        } else if (expr.getRightExpression() instanceof LongValue) {
+                            result.setId(((LongValue) expr.getRightExpression()).getValue());
+                        }
+                    }
+                }
+            }
+            
             if (expr.getRightExpression() instanceof StringValue) {
                 StringValue valueWrapper = (StringValue) expr.getRightExpression();
                 String value = valueWrapper.getValue();
                 
                 if (expr.getLeftExpression() instanceof Column) {
                     Column column = (Column) expr.getLeftExpression();
-                    String columnName = column.getColumnName();
-                    if (aliases.containsKey(columnName)) {
-                        columnName = aliases.get(columnName);
-                    }
+                    String columnName = getColumnName(column);
                     String currentTableName = tableName;
                     if (column.getTable() != null && column.getTable().getName() != null) {
                         currentTableName = column.getTable().getName();
@@ -223,11 +272,20 @@ public class SqlParser {
             }
             // TODO MySQL in standard mode uses " for strings and not for objects as in ANSI_SQL mode, so handle that
         }
+
+        public String getColumnName(Column column) {
+            String columnName = column.getColumnName();
+            if (aliases.containsKey(columnName)) {
+                columnName = aliases.get(columnName);
+            }
+            return columnName;
+        }
     }
     
     public static class SqlParseResult {
         private List<TableColumn> columns = new ArrayList<>();
         private List<TableColumn> whereColumns = new ArrayList<>();
+        private Object id;
         
         public List<TableColumn> getColumns() {
             return columns;
@@ -240,6 +298,12 @@ public class SqlParser {
         }
         public void setWhereColumns(List<TableColumn> whereColumns) {
             this.whereColumns = whereColumns;
+        }
+        public Object getId() {
+            return id;
+        }
+        public void setId(Object id) {
+            this.id = id;
         }
     }
     
