@@ -13,13 +13,15 @@ public class ConnectionInvocationHandler implements InvocationHandler {
     private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
     private SqlParser sqlParser;
+    private LookupManager lookupManager;
     
     ConnectionInvocationHandler(Connection connection, ExternalEncryptionService encryptionService, 
-            AuditLogService auditLogService, SqlParser sqlParser) {
+            AuditLogService auditLogService, SqlParser sqlParser, LookupManager lookupManager) {
         this.connection = connection;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
         this.sqlParser = sqlParser;
+        this.lookupManager = lookupManager;
     }
     
     @Override

@@ -103,8 +103,17 @@ public class SqlParser {
                 .map(c -> new TableColumn(update.getTable().getName(), c.getColumnName(), valuesIterator.next()))
                 .collect(Collectors.toList()));
 
-        
         update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), update.getTable().getName(), idColumns));
+        // if no id is found in the where clause, this mean the update potentially covers more rows
+        // we have to select all affected rows and get their ids
+        if (result.getIds().isEmpty()) {
+            // TODO handle prepared statements as well, meaning that setXxx has to be set to the synthetic select statement as well
+            String query = "SELECT " + idColumns.get(update.getTable().getName()) + " WHERE " + update.getWhere();
+            ResultSet resultSet = sqlStatement.executeQuery(query);
+            while (resultSet.next()) {
+                result.getIds().add(resultSet.getObject(1));
+            }
+        }
         
         return result;
     }
@@ -244,9 +253,9 @@ public class SqlParser {
                     String columnName = getColumnName(column);
                     if (columnName.equals(idColumnName)) {
                         if (expr.getRightExpression() instanceof StringValue) {
-                            result.setId(((StringValue) expr.getRightExpression()).getValue());
+                            result.getIds().add(((StringValue) expr.getRightExpression()).getValue());
                         } else if (expr.getRightExpression() instanceof LongValue) {
-                            result.setId(((LongValue) expr.getRightExpression()).getValue());
+                            result.getIds().add(((LongValue) expr.getRightExpression()).getValue());
                         }
                     }
                 }
@@ -285,7 +294,7 @@ public class SqlParser {
     public static class SqlParseResult {
         private List<TableColumn> columns = new ArrayList<>();
         private List<TableColumn> whereColumns = new ArrayList<>();
-        private Object id;
+        private List<Object> ids = new ArrayList<>();
         
         public List<TableColumn> getColumns() {
             return columns;
@@ -299,11 +308,11 @@ public class SqlParser {
         public void setWhereColumns(List<TableColumn> whereColumns) {
             this.whereColumns = whereColumns;
         }
-        public Object getId() {
-            return id;
+        public List<Object> getIds() {
+            return ids;
         }
-        public void setId(Object id) {
-            this.id = id;
+        public void setIds(List<Object> ids) {
+            this.ids = ids;
         }
     }
     

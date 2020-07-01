@@ -1,6 +1,5 @@
 package com.logsentinel.sentineldb;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +7,8 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.logsentinel.sentineldb.model.ExternalEncryptionResult;
 import com.logsentinel.sentineldb.model.SearchSchema;
@@ -25,8 +26,9 @@ public class ExternalEncryptionService {
 
     private ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     
-    private List<SearchSchema> cachedSchemas = new ArrayList<>();
+    private Map<String, SearchSchema> cachedSchemas = new HashMap<>();
     private Map<String, Boolean> shouldIndexMap = new HashMap<>();
+    private Map<String, List<String>> indexedColumns = new HashMap<>();
     
     public ExternalEncryptionService(String organizationId, String secret, UUID datastoreId) {
         this.organizationId = organizationId;
@@ -37,12 +39,22 @@ public class ExternalEncryptionService {
     public void init() {
         sentinelDBClient = SentinelDBClientBuilder.create(organizationId, secret).build();
         scheduler.scheduleAtFixedRate(() -> {
-            cachedSchemas = sentinelDBClient.getSchemaActions().listSearchSchemas();
+            cachedSchemas = sentinelDBClient.getSchemaActions().listSearchSchemas()
+                    .stream().filter(s -> !s.getFields().isEmpty())
+                    .collect(Collectors.toMap(s -> s.getRecordType(), Function.identity()));
+            
             shouldIndexMap.clear();
-            for (SearchSchema schema : cachedSchemas) {
+            for (SearchSchema schema : cachedSchemas.values()) {
                 for (SearchSchemaField field : schema.getFields()) {
                     shouldIndexMap.put(schema.getRecordType() + ":" + field.getName(), field.isIndexed());
                 }
+                List<String> indexedNotAnalyzedFields = schema.getFields()
+                        .stream().filter(f -> f.isIndexed() && !f.isAnalyzed()).map(SearchSchemaField::getName)
+                        .collect(Collectors.toList());
+                if (!indexedNotAnalyzedFields.isEmpty()) {
+                    indexedColumns.put(schema.getRecordType(), indexedNotAnalyzedFields);
+                }
+                
             }
         }, 0, 10, TimeUnit.MINUTES);
     }
@@ -69,6 +81,14 @@ public class ExternalEncryptionService {
         String ciphertext = ciphertextElements[3];
         
         return sentinelDBClient.getExternalEncryptionActions().decryptData(ciphertext, datastoreId, id, tableName);
+    }
+    
+    public List<String> getSearchableEncryptedColumns(String table) {
+        return indexedColumns.get(table);
+    }
+    
+    public boolean tableConstainsSensitiveData(String table) {
+        return cachedSchemas.containsKey(table);
     }
     
     public boolean isEncrypted(String table, String columnName) {

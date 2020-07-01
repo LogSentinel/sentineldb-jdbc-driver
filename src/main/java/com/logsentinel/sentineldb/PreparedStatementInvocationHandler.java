@@ -15,14 +15,17 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
     private String query;
     private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
+    private LookupManager lookupManager;
     private SqlParseResult parseResult;
     
     public PreparedStatementInvocationHandler(PreparedStatement preparedStatement, String query, 
-            ExternalEncryptionService encryptionService, AuditLogService auditLogService, SqlParser sqlParser) throws SQLException {
+            ExternalEncryptionService encryptionService, AuditLogService auditLogService, 
+            SqlParser sqlParser, LookupManager lookupManager) throws SQLException {
         this.preparedStatement = preparedStatement;
         this.query = query;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
+        this.lookupManager = lookupManager;
         this.parseResult = sqlParser.parse(query, preparedStatement.getConnection());
     }
 

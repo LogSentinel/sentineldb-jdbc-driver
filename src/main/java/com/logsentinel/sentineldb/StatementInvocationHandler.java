@@ -17,13 +17,15 @@ public class StatementInvocationHandler implements InvocationHandler {
     private ExternalEncryptionService encryptionService;
     private AuditLogService auditLogService;
     private SqlParser sqlParser;
+    private LookupManager lookupManager;
     
     StatementInvocationHandler(Statement statement, ExternalEncryptionService encryptionService, 
-            AuditLogService auditLogService, SqlParser sqlParser) {
+            AuditLogService auditLogService, SqlParser sqlParser, LookupManager lookupManager) {
         this.statement = statement;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
         this.sqlParser = sqlParser;
+        this.lookupManager = lookupManager;
     }
     
     @Override
@@ -34,12 +36,14 @@ public class StatementInvocationHandler implements InvocationHandler {
             SqlParseResult parseResult = sqlParser.parse(query, statement.getConnection());
             UUID encryptionRecordId = UUID.randomUUID();
             
+            // TODO set the sentineldb_record_id column
             for (TableColumn column : parseResult.getColumns()) {
                 if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
                     query = query.replace(column.getValue(), 
                         encryptionService.encryptString(query, column.getTableName(), column.getColumName(), encryptionRecordId));
                 }
             }
+
             for (TableColumn whereColumn : parseResult.getWhereColumns()) {
                 
             }

@@ -4,7 +4,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Manages the lookup table. The lookup table has lookup_key=hash(encrypt(plaintext)) and 
@@ -18,38 +17,68 @@ import java.util.UUID;
  */
 public class LookupManager {
 
-    public void initLookup(Connection connection, List<String> tables) {
+    private static final String SENTINELDB_LOOKUP_COLUMN_SUFFIX = "_sentineldb_lookup";
+    private static final String SENTINELDB_RECORD_ID_COLUMN_NAME = "sentineldb_record_id";
+    
+    private ExternalEncryptionService encryptionService;
+    private Connection connection;
+    
+    public LookupManager(ExternalEncryptionService encryptionService, Connection connection) { 
+        this.encryptionService = encryptionService;
+        this.connection = connection;
+    }
+    
+    public void initLookup(List<String> tables) {
         try {
-            Statement stm = connection.createStatement();
-            try {
+            try (Statement stm = connection.createStatement()) {
                 stm.executeQuery("SELECT * FROM sentineldb_lookup LIMIT 1");
             } catch (SQLException ex) {
-                // table not found, create it
-                stm.executeUpdate("CREATE TABLE sentineldb_lookup (lookup_key VARCHAR(200) PRIMARY KEY, target_id VARCHAR(100), target_id_type VARCHAR(5)");
+                try (Statement createStm = connection.createStatement()) {
+                    // table not found, create it
+                    createStm.executeUpdate("CREATE TABLE sentineldb_lookup (lookup_key VARCHAR(44) PRIMARY KEY, target_record_id VARCHAR(36)");
+                }
             }
             
-            appendRecordIdColumn(tables, connection);
-            appendLookupColumn(tables, connection);
+            try (Statement stm = connection.createStatement()) {
+                appendRecordIdColumn(tables, stm);
+                appendLookupColumn(tables, stm);
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
     
-    private void appendLookupColumn(List<String> tables, Connection connection) {
-        // TODO Auto-generated method stub
+    private void appendLookupColumn(List<String> tables, Statement stm) throws SQLException {
+        for (String table : tables) {
+            List<String> searchableColumns = encryptionService.getSearchableEncryptedColumns(table);
+            for (String column : searchableColumns) {
+                try {
+                    stm.executeUpdate("ALTER TABLE " + table + " ADD " + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + " VARCHAR(44)");
+                    stm.executeUpdate("CREATE INDEX " + column + "_sentineldb_lookup_idx ON " + table + " (" + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + ")");
+                } catch (SQLException ex) {
+                    // ignore failures to create column and index; it means they already exist
+                }
+            }
+        }
     }
 
 
-    private void appendRecordIdColumn(List<String> tables, Connection connection) {
-        // TODO Auto-generated method stub
-        
+    private void appendRecordIdColumn(List<String> tables, Statement stm) {
+        for (String table : tables) {
+            if (encryptionService.tableConstainsSensitiveData(table)) {
+                try {
+                    stm.executeUpdate("ALTER TABLE " + table + " ADD " + SENTINELDB_RECORD_ID_COLUMN_NAME + " VARCHAR(36)");
+                    stm.executeUpdate("CREATE UNIQUE INDEX sentineldb_record_id_idx ON " + table + " (" + SENTINELDB_RECORD_ID_COLUMN_NAME + ")");
+                } catch (SQLException ex) {
+                    // ignore failures to create column and index; it means they already exist
+                }
+            }
+        }
     }
 
-    public void storeLookup(String lookupKey, UUID value) {
-        
-    }
-    
-    public static enum IdType {
-        INT, UUID, STRING, COMPOSITE
+    public void storeLookup(String lookupKey, String table, String column, String value, Connection connection) throws SQLException {
+        try (Statement stm = connection.createStatement()) {
+            
+        }
     }
 }

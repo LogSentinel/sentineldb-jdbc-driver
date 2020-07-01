@@ -82,13 +82,19 @@ public class SentinelDBDriver implements Driver {
         encryptionService.init();
         
         Connection connection = delegatedDriver.connect(delegatedUrl, info);
+        
+        LookupManager lookupManager = new LookupManager(encryptionService, connection);
+        
         try (Statement stm = connection.createStatement()) {
             // TODO periodically reload table data if we assume database changes can happen without an application restart?
             List<String> tables = listTables(stm);
             
+            lookupManager.initLookup(tables);
+            
             return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] {Connection.class}, 
-                    new ConnectionInvocationHandler(connection, encryptionService, auditLogService, new SqlParser(tables)));
+                    new ConnectionInvocationHandler(connection, encryptionService, 
+                            auditLogService, new SqlParser(tables), lookupManager));
         }
     }
 
