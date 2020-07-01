@@ -9,6 +9,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.apache.commons.lang3.tuple.Pair;
 
 import com.logsentinel.sentineldb.model.ExternalEncryptionResult;
 import com.logsentinel.sentineldb.model.SearchSchema;
@@ -59,10 +60,10 @@ public class ExternalEncryptionService {
         }, 0, 10, TimeUnit.MINUTES);
     }
     
-    public String encryptString(String plaintext, String tableName, String columnName, Object id) {
+    public Pair<String, List<String>> encryptString(String plaintext, String tableName, String columnName, Object id) {
         plaintext = extendPlaintext(plaintext);
         ExternalEncryptionResult result = sentinelDBClient.getExternalEncryptionActions().encryptData(datastoreId, String.valueOf(id), tableName, columnName, plaintext);
-        return ENCRYPTED_FIELD_PREFIX + tableName + ":" + id + ":" + result.getCiphertext();
+        return Pair.of(ENCRYPTED_FIELD_PREFIX + tableName + ":" + id + ":" + result.getCiphertext(), result.getLookupKeys());
     }
     
     private String extendPlaintext(String plaintext) {
@@ -81,6 +82,10 @@ public class ExternalEncryptionService {
         String ciphertext = ciphertextElements[3];
         
         return sentinelDBClient.getExternalEncryptionActions().decryptData(ciphertext, datastoreId, id, tableName);
+    }
+    
+    public String getLookupKey(String plaintext) {
+        return sentinelDBClient.getExternalEncryptionActions().getLookupValue(datastoreId, plaintext);
     }
     
     public List<String> getSearchableEncryptedColumns(String table) {

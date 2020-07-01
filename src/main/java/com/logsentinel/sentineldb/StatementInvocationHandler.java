@@ -5,9 +5,10 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import org.apache.commons.lang3.tuple.Pair;
 
 import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
 import com.logsentinel.sentineldb.SqlParser.TableColumn;
@@ -39,13 +40,15 @@ public class StatementInvocationHandler implements InvocationHandler {
             // TODO set the sentineldb_record_id column
             for (TableColumn column : parseResult.getColumns()) {
                 if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
-                    query = query.replace(column.getValue(), 
-                        encryptionService.encryptString(query, column.getTableName(), column.getColumName(), encryptionRecordId));
+                    Pair<String, List<String>> result = encryptionService.encryptString(query, column.getTableName(), column.getColumName(), encryptionRecordId);
+                    query = query.replace(column.getValue(), result.getLeft());
+                    lookupManager.storeLookup(result.getRight(), column.getTableName(), column.getColumName(), statement.getConnection());
                 }
             }
 
             for (TableColumn whereColumn : parseResult.getWhereColumns()) {
-                
+                query = query.replace(whereColumn.getValue(), encryptionService.getLookupKey(whereColumn.getValue()));
+                query = query.replace(whereColumn.getColumName(), whereColumn.getColumName() + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX);
             }
             args[0] = query;
         }

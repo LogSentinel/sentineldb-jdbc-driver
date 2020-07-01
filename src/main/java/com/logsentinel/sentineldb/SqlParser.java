@@ -100,7 +100,7 @@ public class SqlParser {
         
         Iterator<String> valuesIterator = values.iterator();
         result.getColumns().addAll(columns.stream()
-                .map(c -> new TableColumn(update.getTable().getName(), c.getColumnName(), valuesIterator.next()))
+                .map(c -> new TableColumn(update.getTable().getName(), c.getColumnName(), valuesIterator.next(), false))
                 .collect(Collectors.toList()));
 
         update.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), update.getTable().getName(), idColumns));
@@ -163,7 +163,7 @@ public class SqlParser {
         
         Iterator<String> valuesIterator = values.iterator();
         result.getColumns().addAll(columns.stream()
-                .map(c -> new TableColumn(insert.getTable().getName(), c.getColumnName(), valuesIterator.next()))
+                .map(c -> new TableColumn(insert.getTable().getName(), c.getColumnName(), valuesIterator.next(), false))
                 .collect(Collectors.toList()));
         return result;
     }
@@ -193,16 +193,18 @@ public class SqlParser {
                 }
             };
             
-            for (Join join : plainSelect.getJoins()) {
-                if (join.getRightItem().getAlias() != null) {
-                    StringBuilder joinTableNameBuilder = new StringBuilder();
-                    join.getRightItem().accept(new FromItemVisitorAdapter() {
-                        @Override
-                        public void visit(Table table) {
-                            joinTableNameBuilder.append(table.getName());
-                        }
-                    });
-                    aliases.put(join.getRightItem().getAlias().getName(), joinTableNameBuilder.toString());
+            if (plainSelect.getJoins() != null) {
+                for (Join join : plainSelect.getJoins()) {
+                    if (join.getRightItem().getAlias() != null) {
+                        StringBuilder joinTableNameBuilder = new StringBuilder();
+                        join.getRightItem().accept(new FromItemVisitorAdapter() {
+                            @Override
+                            public void visit(Table table) {
+                                joinTableNameBuilder.append(table.getName());
+                            }
+                        });
+                        aliases.put(join.getRightItem().getAlias().getName(), joinTableNameBuilder.toString());
+                    }
                 }
             }
             plainSelect.getFromItem().accept(new FromItemVisitorAdapter() {
@@ -275,7 +277,7 @@ public class SqlParser {
                     if (aliases.containsKey(currentTableName)) {
                         currentTableName = aliases.get(currentTableName); 
                     }
-                    result.getWhereColumns().add(new TableColumn(currentTableName, columnName, value));
+                    result.getWhereColumns().add(new TableColumn(currentTableName, columnName, value, true));
                 }
                 
             }
@@ -320,11 +322,13 @@ public class SqlParser {
         private String columName;
         private String tableName;
         private String value;
+        private boolean whereClause;
         
-        public TableColumn(String tableName, String columName, String value) {
+        public TableColumn(String tableName, String columName, String value, boolean whereClause) {
             this.tableName = tableName;
             this.columName = columName;
             this.value = value;
+            this.whereClause = whereClause;
         }
         
         public String getColumName() {
@@ -346,6 +350,14 @@ public class SqlParser {
 
         public void setValue(String value) {
             this.value = value;
+        }
+
+        public boolean isWhereClause() {
+            return whereClause;
+        }
+
+        public void setWhereClause(boolean whereClause) {
+            this.whereClause = whereClause;
         }
 
         @Override

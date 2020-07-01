@@ -17,8 +17,8 @@ import java.util.List;
  */
 public class LookupManager {
 
-    private static final String SENTINELDB_LOOKUP_COLUMN_SUFFIX = "_sentineldb_lookup";
-    private static final String SENTINELDB_RECORD_ID_COLUMN_NAME = "sentineldb_record_id";
+    public static final String SENTINELDB_LOOKUP_COLUMN_SUFFIX = "_sentineldb_lookup";
+    public static final String SENTINELDB_RECORD_ID_COLUMN_NAME = "sentineldb_record_id";
     
     private ExternalEncryptionService encryptionService;
     private Connection connection;
@@ -76,7 +76,7 @@ public class LookupManager {
         }
     }
 
-    public void storeLookup(String lookupKey, String table, String column, String value, Connection connection) throws SQLException {
+    public void storeLookup(List<String> list, String table, String column, Connection connection) throws SQLException {
         try (Statement stm = connection.createStatement()) {
             
         }

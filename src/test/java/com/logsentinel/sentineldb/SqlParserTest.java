@@ -103,7 +103,7 @@ public class SqlParserTest {
     @Test
     public void updateExtractIdTest() {
         SqlParseResult result = parser.parse("UPDATE table SET col1='val1' WHERE id=2", connection);
-        assertThat(result.getId(), equalTo(2L));
+        assertThat(result.getIds().iterator().next(), equalTo(2L));
     }
     
     
