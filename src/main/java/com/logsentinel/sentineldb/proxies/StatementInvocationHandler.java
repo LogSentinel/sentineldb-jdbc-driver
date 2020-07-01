@@ -50,7 +50,7 @@ public class StatementInvocationHandler implements InvocationHandler {
                 // as they are individually decrypted based on the ID stored in the column itself
                 // The added bonus of that approach is that is serves as re-encryption (using a new key for every update)
                 // the only downside is that in update-heavy databases there will be a lot of unused keys in the key management system
-                // However, keys are cheap and there can be a scheduled job that collects all active IDs and deletes dormant keys 
+                // However, keys are cheap and there can be a scheduled job that collects all active IDs and deletes dormant keys (TODO)
                 
                 UUID encryptionRecordId = UUID.randomUUID();
                 if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {

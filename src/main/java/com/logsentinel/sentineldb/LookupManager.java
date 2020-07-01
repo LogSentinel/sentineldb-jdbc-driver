@@ -18,7 +18,6 @@ import java.util.List;
 public class LookupManager {
 
     public static final String SENTINELDB_LOOKUP_COLUMN_SUFFIX = "_sentineldb_lookup";
-    public static final String SENTINELDB_RECORD_ID_COLUMN_NAME = "sentineldb_record_id";
     
     private ExternalEncryptionService encryptionService;
     private Connection connection;
@@ -40,7 +39,6 @@ public class LookupManager {
             }
             
             try (Statement stm = connection.createStatement()) {
-                appendRecordIdColumn(tables, stm);
                 appendLookupColumn(tables, stm);
             }
         } catch (SQLException e) {
@@ -62,23 +60,14 @@ public class LookupManager {
         }
     }
 
-
-    private void appendRecordIdColumn(List<String> tables, Statement stm) {
-        for (String table : tables) {
-            if (encryptionService.tableConstainsSensitiveData(table)) {
-                try {
-                    stm.executeUpdate("ALTER TABLE " + table + " ADD " + SENTINELDB_RECORD_ID_COLUMN_NAME + " VARCHAR(36)");
-                    stm.executeUpdate("CREATE UNIQUE INDEX sentineldb_record_id_idx ON " + table + " (" + SENTINELDB_RECORD_ID_COLUMN_NAME + ")");
-                } catch (SQLException ex) {
-                    // ignore failures to create column and index; it means they already exist
-                }
-            }
-        }
-    }
-
-    public void storeLookup(List<String> lookupKeys, String table, String column, Connection connection) throws SQLException {
+    public void storeLookup(List<String> lookupKeys, String table, String column, List<Object> ids, Connection connection) throws SQLException {
         try (Statement stm = connection.createStatement()) {
-            
+            // non-analyzed lookup keys are stored in additional columns in the same table 
+            if (lookupKeys.size() == 1) {
+                stm.executeUpdate("UPDATE " + table + " SET column='" + lookupKeys.iterator().next() + "' WHERE "); // TODO idColumn IN (ids)
+            } else {
+                // insert into lookup table, decartes multiplication (lookupKeys x ids)
+            }
         }
     }
 }
