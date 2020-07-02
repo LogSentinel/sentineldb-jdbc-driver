@@ -52,6 +52,7 @@ public class SentinelDBDriver implements Driver {
     
     private List<String> ALL_PROPERTIES = Arrays.asList(SENTINELDB_ORGANIZATION_ID, SENTINELDB_SECRET, SENTINELDB_DATASTORE_ID, TRAILS_ORGANIZATION_ID, 
             TRAILS_SECRET, TRAILS_APPLICATION_ID, TRAILS_URL, ACTOR_EXTRACTION_FUNCTION);
+
     private static final String CONNECTION_STRING_PREFIX = "sentineldb:"; 
     
     static {
@@ -64,6 +65,10 @@ public class SentinelDBDriver implements Driver {
     
     @Override
     public Connection connect(String url, Properties info) throws SQLException {
+        if (!acceptsURL(url)) {
+            return null;
+        }
+        
         String delegatedUrl = url.replace(CONNECTION_STRING_PREFIX, "");
         Driver delegatedDriver = DriverManager.getDriver(delegatedUrl);
         

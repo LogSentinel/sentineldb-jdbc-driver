@@ -46,16 +46,18 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         try {
             if (parseResult != null && method.getName().equals("setString")) {
                 TableColumn column = indexedParamColumns.get((int) args[0]);
-                // in case the parameter is in the where clause, set the value to the lookup key
-                // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
-                if (column.isWhereClause()) {
-                    args[1] = encryptionService.getLookupKey((String) args[1]);
-                } else {
-                    // TODO store lookup keys
-                    args[1] = encryptionService.encryptString((String) args[1], 
-                            column.getTableName(), 
-                            column.getColumName(), 
-                            UUID.randomUUID()).getKey(); // check extended comment in StatementInvocationHandler
+                if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
+                    // in case the parameter is in the where clause, set the value to the lookup key
+                    // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
+                    if (column.isWhereClause()) {
+                        args[1] = encryptionService.getLookupKey((String) args[1]);
+                    } else {
+                        // TODO store lookup keys
+                        args[1] = encryptionService.encryptString((String) args[1], 
+                                column.getTableName(), 
+                                column.getColumName(), 
+                                UUID.randomUUID()).getKey(); // check extended comment in StatementInvocationHandler
+                    }
                 }
             }
             result = method.invoke(preparedStatement, args);
