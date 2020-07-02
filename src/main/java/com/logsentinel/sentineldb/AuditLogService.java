@@ -33,10 +33,17 @@ public class AuditLogService {
     }
 
     public void init() {
-        client = LogSentinelClientBuilder.create(applicationId, organizationId, secret).setBasePath(url).build();
+        if (organizationId != null) {
+            client = LogSentinelClientBuilder.create(applicationId, organizationId, secret).setBasePath(url).build();
+        } else {
+            System.out.println("Not using secure logging due to missing configuration properties trailsOrganizationId, trailsSecret and trailsApplicationId");
+        }
     }
 
     public void logQuery(String query, List<String> columnsReturned) {
+        if (client == null) {
+            return;
+        }
         executor.submit(() -> {
             try {
                 ActorData actorData = getActorData();
@@ -49,6 +56,9 @@ public class AuditLogService {
     }
 
     public void logQuery(String query) {
+        if (client == null) {
+            return;
+        }
         executor.submit(() -> {
             try {
                 ActorData actorData = getActorData();

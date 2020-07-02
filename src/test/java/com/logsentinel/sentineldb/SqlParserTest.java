@@ -1,9 +1,12 @@
 package com.logsentinel.sentineldb;
 
-import static org.mockito.Mockito.*;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.junit.Assert.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -11,7 +14,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -25,7 +30,16 @@ import com.logsentinel.sentineldb.SqlParser.TableColumn;
 
 public class SqlParserTest {
 
-    private SqlParser parser = new SqlParser(Arrays.asList("table"));
+    private SqlParser parser = createSqlParser();
+    
+    private static SqlParser createSqlParser() {
+        TableMetadata tableMetadata = new TableMetadata();
+        tableMetadata.setTables(Arrays.asList("table"));
+        Map<String, String> idColumns = new HashMap<>();
+        idColumns.put("table", "id");
+        tableMetadata.setIdColumns(idColumns);
+        return new SqlParser(tableMetadata);
+    }
     
     @Mock
     private Connection connection;
@@ -35,15 +49,8 @@ public class SqlParserTest {
         MockitoAnnotations.initMocks(this);
         Statement mockStatement = mock(Statement.class);
         ResultSet mockResultSet = mock(ResultSet.class);
-        when(mockResultSet.next()).thenReturn(true).thenReturn(false);
-        when(mockResultSet.getString(eq("Key"))).thenReturn("PRI");
-        when(mockResultSet.getString(eq("Field"))).thenReturn("id");
         when(mockStatement.executeQuery(anyString())).thenReturn(mockResultSet);
-        when(mockStatement.getConnection()).thenReturn(connection);
         when(connection.createStatement()).thenReturn(mockStatement);
-        DatabaseMetaData dbMetadata = mock(DatabaseMetaData.class);
-        when(dbMetadata.getDatabaseProductName()).thenReturn(DatabaseType.MYSQL.getProviderName());
-        when(connection.getMetaData()).thenReturn(dbMetadata);
     }
     
     @Test

@@ -1,16 +1,110 @@
 package com.logsentinel.sentineldb;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.BiFunction;
+
 import org.junit.Test;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import com.logsentinel.sentineldb.api.ExternalEncryptionApi;
+import com.logsentinel.sentineldb.api.SearchSchemaApi;
+import com.logsentinel.sentineldb.model.ExternalEncryptionResult;
+import com.logsentinel.sentineldb.model.SearchSchema;
+import com.logsentinel.sentineldb.model.SearchSchemaField;
 
 public class EmbeddedDatabaseTest {
 
+    private static final String CONNECTION_STRING = "jdbc:sentineldb:h2:mem:public;INIT=create schema if not exists public;sentineldbOrganizationId=x;sentineldbSecret=y;sentineldbDatastoreId=ab40b113-8538-4cd9-996e-c269ba1e9aa2";
+
     @Test
-    public void endToEndTest() {
-        // insert
-        // select
-        // update
-        // select
-        // delete
-        // select
+    public void endToEndTest() throws Exception {
+        // let it auto-register
+        new SentinelDBDriver();
+        SentinelDBClient mockClient = mock(SentinelDBClient.class);
+        BiFunction<String, String, SentinelDBClient> builder = (orgId, secret) -> mockClient;
+        ReflectionTestUtils.setField(ExternalEncryptionService.class, "clientBuilder", builder);
+        ExternalEncryptionApi externalEncryptionApi = mock(ExternalEncryptionApi.class);
+        SearchSchemaApi schemaApi = mock(SearchSchemaApi.class);
+        when(mockClient.getExternalEncryptionActions()).thenReturn(externalEncryptionApi);
+        when(mockClient.getSchemaActions()).thenReturn(schemaApi);
+        when(externalEncryptionApi.encryptData(any(), anyString(), anyString(), anyString(), anyString())).thenAnswer(i -> createEncryptionResult(i.getArgument(4), i.getArgument(3)));
+        when(schemaApi.listSearchSchemas()).thenReturn(Collections.singletonList(createTestSchema()));
+        
+        try (Connection connection = DriverManager.getConnection(CONNECTION_STRING)) {
+            // DDL to create the table with sensitive data
+            try (Statement stm = connection.createStatement()) {
+                stm.executeUpdate("CREATE TABLE sensitive (id int auto_increment NOT NULL, "
+                        + "sensitive_field VARCHAR(100), searchable_sensitive_field VARCHAR(100), non_sensitive_field VARCHAR(100))");
+            }
+            
+            // make another connection to get a fresh list of tables
+            try (Connection conn2 = DriverManager.getConnection(CONNECTION_STRING)) {
+                
+                // first insert some mix of encrypted and non-encrypted fields
+                try (PreparedStatement pstm = conn2.prepareStatement("INSERT INTO sensitive(sensitive_field, searchable_sensitive_field, non_sensitive_field) VALUES (?, ?, ?)")) {
+                    pstm.setString(1, "sensitive");
+                    pstm.setString(2, "sensitive_searchable");
+                    pstm.setString(3, "non_sensitive");
+                    pstm.executeUpdate();
+                }
+                
+                // then select them back to see if they will be received unencrypted
+                try (Statement stm = conn2.createStatement()) {
+                    ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
+                    rs.next();
+                    System.out.println(rs.getString(2));
+                }
+            }
+        }
+        
+            
+            // insert
+            // select
+            // update
+            // select
+            // delete
+            // select
+    }
+
+    private ExternalEncryptionResult createEncryptionResult(Object plaintext, Object fieldName) {
+        ExternalEncryptionResult result = new ExternalEncryptionResult();
+        result.setCiphertext(plaintext + "_ENCRYPTED");
+        // TODO
+        if (fieldName.equals("")) {
+            result.setLookupKeys(Arrays.asList(""));
+        }
+        return result;
+    }
+
+    private SearchSchema createTestSchema() {
+        SearchSchema schema = new SearchSchema();
+        schema.setRecordType("sensitive");
+        List<SearchSchemaField> fields = new ArrayList<>();
+        SearchSchemaField field1 = new SearchSchemaField();
+        field1.setIndexed(false);
+        field1.setAnalyzed(false);
+        field1.setName("sensitive_field");
+        fields.add(field1);
+        SearchSchemaField field2 = new SearchSchemaField();
+        field2.setIndexed(true);
+        field2.setAnalyzed(false);
+        field2.setName("searchable_sensitive_field");
+        fields.add(field2);
+        
+        schema.setFields(fields);
+        return schema;
     }
 }

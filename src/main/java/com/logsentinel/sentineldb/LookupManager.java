@@ -34,7 +34,7 @@ public class LookupManager {
             } catch (SQLException ex) {
                 try (Statement createStm = connection.createStatement()) {
                     // table not found, create it
-                    createStm.executeUpdate("CREATE TABLE sentineldb_lookup (lookup_key VARCHAR(44) PRIMARY KEY, target_record_id VARCHAR(36)");
+                    createStm.executeUpdate("CREATE TABLE sentineldb_lookup (lookup_key VARCHAR(44) PRIMARY KEY, target_record_id VARCHAR(36))");
                 }
             }
             
@@ -49,12 +49,14 @@ public class LookupManager {
     private void appendLookupColumn(List<String> tables, Statement stm) throws SQLException {
         for (String table : tables) {
             List<String> searchableColumns = encryptionService.getSearchableEncryptedColumns(table);
-            for (String column : searchableColumns) {
-                try {
-                    stm.executeUpdate("ALTER TABLE " + table + " ADD " + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + " VARCHAR(44)");
-                    stm.executeUpdate("CREATE INDEX " + column + "_sentineldb_lookup_idx ON " + table + " (" + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + ")");
-                } catch (SQLException ex) {
-                    // ignore failures to create column and index; it means they already exist
+            if (searchableColumns != null) {
+                for (String column : searchableColumns) {
+                    try {
+                        stm.executeUpdate("ALTER TABLE " + table + " ADD " + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + " VARCHAR(44)");
+                        stm.executeUpdate("CREATE INDEX " + column + "_sentineldb_lookup_idx ON " + table + " (" + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + ")");
+                    } catch (SQLException ex) {
+                        // ignore failures to create column and index; it means they already exist
+                    }
                 }
             }
         }

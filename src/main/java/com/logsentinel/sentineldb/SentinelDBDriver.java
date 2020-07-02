@@ -10,11 +10,17 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.ArrayUtils;
 
@@ -44,6 +50,8 @@ public class SentinelDBDriver implements Driver {
     private static final int MAJOR_VERSION = 1;
     private static final int MINOR_VERSION = 0;
     
+    private List<String> ALL_PROPERTIES = Arrays.asList(SENTINELDB_ORGANIZATION_ID, SENTINELDB_SECRET, SENTINELDB_DATASTORE_ID, TRAILS_ORGANIZATION_ID, 
+            TRAILS_SECRET, TRAILS_APPLICATION_ID, TRAILS_URL, ACTOR_EXTRACTION_FUNCTION);
     private static final String CONNECTION_STRING_PREFIX = "sentineldb:"; 
     
     static {
@@ -70,18 +78,25 @@ public class SentinelDBDriver implements Driver {
             }
         }
         
-        AuditLogService auditLogService = new AuditLogService(info.getProperty(TRAILS_ORGANIZATION_ID), 
-                info.getProperty(TRAILS_SECRET), 
-                info.getProperty(TRAILS_APPLICATION_ID),
-                info.getProperty(TRAILS_URL),
+        Map<String, String> urlParams = splitParams(url);
+        
+        AuditLogService auditLogService = new AuditLogService(getProperty(info, urlParams, TRAILS_ORGANIZATION_ID, false), 
+                getProperty(info, urlParams, TRAILS_SECRET, false), 
+                getProperty(info, urlParams, TRAILS_APPLICATION_ID, false),
+                getProperty(info, urlParams, TRAILS_URL, false),
                 actorExtractionMethod);
         auditLogService.init();
         
+        String sentinelDbOrganizationId = getProperty(info, urlParams, SENTINELDB_ORGANIZATION_ID, true);
+        String sentinelDbSecret = getProperty(info, urlParams, SENTINELDB_SECRET, true);
+        String sentinelDbDatastoreId = getProperty(info, urlParams, SENTINELDB_DATASTORE_ID, true);
+        
         ExternalEncryptionService encryptionService = new ExternalEncryptionService(
-                info.getProperty(SENTINELDB_ORGANIZATION_ID), 
-                info.getProperty(SENTINELDB_SECRET),
-                UUID.fromString(info.getProperty(SENTINELDB_DATASTORE_ID)));
+                sentinelDbOrganizationId, sentinelDbSecret,
+                UUID.fromString(sentinelDbDatastoreId));
         encryptionService.init();
+        
+        delegatedUrl = cleanupParameters(delegatedUrl, urlParams);
         
         Connection connection = delegatedDriver.connect(delegatedUrl, info);
         
@@ -90,13 +105,48 @@ public class SentinelDBDriver implements Driver {
         try (Statement stm = connection.createStatement()) {
             // TODO periodically reload table data if we assume database changes can happen without an application restart?
             List<String> tables = listTables(stm);
+            TableMetadata tableMetadata = new TableMetadata();
+            tableMetadata.setTables(tables);
+            tableMetadata.setTableColumns(listTableColumns(tables, stm));
+            tableMetadata.setIdColumns(listIdColumns(tables, stm));
             
             lookupManager.initLookup(tables);
             
             return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] {Connection.class}, 
                     new ConnectionInvocationHandler(connection, encryptionService, 
-                            auditLogService, new SqlParser(tables), lookupManager));
+                            auditLogService, new SqlParser(tableMetadata), lookupManager));
+        }
+    }
+
+    private String cleanupParameters(String delegatedUrl, Map<String, String> params) {
+        if (!delegatedUrl.endsWith(";")) {
+            delegatedUrl = delegatedUrl + ";";
+        }
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if (ALL_PROPERTIES.contains(entry.getKey())) {
+                delegatedUrl = delegatedUrl.replace(entry.getKey() + "=" + entry.getValue() + ";", "");
+            }
+        }
+        if (delegatedUrl.endsWith(";")) {
+            delegatedUrl = delegatedUrl.substring(0, delegatedUrl.length() - 2);
+        }
+        return delegatedUrl;
+        
+    }
+
+    public String getProperty(Properties info, Map<String, String> urlParams, String key, boolean required) {
+        try {
+            String value = info.getProperty(key);
+            if (value == null) {
+                value = urlParams.get(key);
+            }
+            if (value == null && required) {
+                throw new IllegalArgumentException("Missing property " + key);
+            }
+            return value;
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
         }
     }
 
@@ -105,7 +155,7 @@ public class SentinelDBDriver implements Driver {
         List<String> result = new ArrayList<>();
         // if is more readable than switch
         DatabaseType databaseType = DatabaseType.findByName(database);
-        if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
+        if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB || databaseType == DatabaseType.H2) {
             ResultSet rs = stm.executeQuery("SHOW TABLES");
             while (rs.next()) {
                 result.add(rs.getString(1));
@@ -115,8 +165,63 @@ public class SentinelDBDriver implements Driver {
             while (rs.next()) {
                 result.add(rs.getString(1));
             }
-        } // TODO 
+        } // TODO
         return result;
+    }
+    
+    private Map<String, List<String>> listTableColumns(List<String> tables, Statement stm) throws SQLException {
+        String database = stm.getConnection().getMetaData().getDatabaseProductName();
+        DatabaseType databaseType = DatabaseType.findByName(database);
+        Map<String, List<String>> result = new HashMap<>();
+        for (String tableName : tables) {
+            List<String> columns = new ArrayList<>();
+            result.put(tableName, columns);
+            
+            if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
+                ResultSet rs = stm.executeQuery("DESCRIBE " + tableName);
+                while (rs.next()) {
+                    columns.add(rs.getString("Field"));
+                }
+            } else if (databaseType == DatabaseType.POSTGRESQL) {
+                
+            } else if (databaseType == DatabaseType.H2) {
+                ResultSet rs = stm.executeQuery("SHOW COLUMNS FROM " + tableName);
+                while (rs.next()) {
+                    columns.add(rs.getString("FIELD"));
+                }
+                
+            } // TODO
+        }
+        return result;
+    }
+    
+    private Map<String, String> listIdColumns(List<String> tables, Statement sqlStatement) throws SQLException {
+        String database = sqlStatement.getConnection().getMetaData().getDatabaseProductName();
+        DatabaseType databaseType = DatabaseType.findByName(database);
+        Map<String, String> idColumns = new HashMap<>();
+        for (String tableName : tables) {
+            if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
+                ResultSet rs = sqlStatement.executeQuery("DESCRIBE " + tableName);
+                while (rs.next()) {
+                    // TODO composite IDs?
+                    if ("PRI".equals(rs.getString("Key"))) {
+                        idColumns.put(tableName, rs.getString("Field"));
+                    }
+                }
+            } else if (databaseType == DatabaseType.POSTGRESQL) {
+                
+            } else if (databaseType == DatabaseType.H2) {
+                ResultSet rs = sqlStatement.executeQuery("SHOW COLUMNS FROM " + tableName);
+                while (rs.next()) {
+                    // TODO composite IDs?
+                    if ("PRI".equals(rs.getString("KEY"))) {
+                        idColumns.put(tableName, rs.getString("FIELD"));
+                    }
+                }
+                
+            } // TODO
+        }
+        return idColumns;
     }
     
     @Override
@@ -167,6 +272,23 @@ public class SentinelDBDriver implements Driver {
     @Override
     public Logger getParentLogger() throws SQLFeatureNotSupportedException {
         throw new SQLFeatureNotSupportedException();
+    }
+    
+    public Map<String, String> splitParams(String uri) {
+        if (uri == null || uri.isEmpty() || !uri.contains(";")) {
+            return Collections.emptyMap();
+        }
+        return Arrays.stream(uri.split(";"))
+                .map(this::splitParameter)
+                .filter(e -> e.getKey() != null && e.getValue() != null)
+                .collect(Collectors.toMap(SimpleImmutableEntry::getKey, SimpleImmutableEntry::getValue));
+    }
+
+    private SimpleImmutableEntry<String, String> splitParameter(String it) {
+        final int idx = it.indexOf("=");
+        final String key = idx > 0 ? it.substring(0, idx) : it;
+        final String value = idx > 0 && it.length() > idx + 1 ? it.substring(idx + 1) : null;
+        return new SimpleImmutableEntry<>(key, value);
     }
 
 }

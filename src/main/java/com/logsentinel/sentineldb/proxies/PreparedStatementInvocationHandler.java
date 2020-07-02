@@ -35,6 +35,7 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
         this.lookupManager = lookupManager;
+        // TODO for INSERT INTO queries without a field list, there should be automatically appended (and set) as many values as there are additionally created columns 
         this.parseResult = sqlParser.parse(query, preparedStatement.getConnection());
         extractIndexedParamColumnNames();
     }
@@ -43,20 +44,24 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         Object result = null;
         try {
-            if (method.getName().equals("setString")) {
+            if (parseResult != null && method.getName().equals("setString")) {
                 TableColumn column = indexedParamColumns.get((int) args[0]);
                 // in case the parameter is in the where clause, set the value to the lookup key
                 // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
                 if (column.isWhereClause()) {
                     args[1] = encryptionService.getLookupKey((String) args[1]);
                 } else {
+                    // TODO store lookup keys
                     args[1] = encryptionService.encryptString((String) args[1], 
                             column.getTableName(), 
                             column.getColumName(), 
-                            UUID.randomUUID()); // check extended comment in StatementInvocationHandler
+                            UUID.randomUUID()).getKey(); // check extended comment in StatementInvocationHandler
                 }
             }
             result = method.invoke(preparedStatement, args);
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            throw ex;
         } finally {
             if (query != null && method.getName().startsWith("execute")) {
                 if (result instanceof ResultSet) {

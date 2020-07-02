@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
+import net.sf.jsqlparser.expression.JdbcParameter;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
@@ -40,12 +41,13 @@ import net.sf.jsqlparser.statement.update.Update;
 
 public class SqlParser {
 
-    // TODO change to guava with expiry
-    private Map<String, String> idColumns = new HashMap<>(); 
-    private List<String> tables;
+    // TODO change to guava with expiry?
+    private Map<String, String> idColumns = new HashMap<>();
+    private Map<String, List<String>> tableColumns = new HashMap<>();
     
-    public SqlParser(List<String> tables) {
-        this.tables = tables;
+    public SqlParser(TableMetadata tableMetadata) {
+        this.idColumns = tableMetadata.getIdColumns();
+        this.tableColumns = tableMetadata.getTableColumns();
     }
 
     public SqlParseResult parse(String query, Connection connection) {
@@ -61,7 +63,6 @@ public class SqlParser {
             } else if (stm instanceof Delete) {
                 return handleDelete(stm);
             } else {
-                System.out.println("Unrecognized statement of type " + stm.getClass());
                 return null;
             }
         } catch (JSQLParserException | SQLException e) {
@@ -88,14 +89,6 @@ public class SqlParser {
 
     public SqlParseResult handleUpdate(Statement stm, java.sql.Statement sqlStatement) throws SQLException {
         SqlParseResult result = new SqlParseResult();
-        
-        if (idColumns.isEmpty()) {
-            synchronized (this) {
-                if (idColumns.isEmpty()) {
-                    loadIdColumns(sqlStatement);
-                }
-            }
-        }
         
         Update update = (Update) stm;
         List<Column> columns = update.getColumns();
@@ -128,33 +121,16 @@ public class SqlParser {
         return result;
     }
 
-    private void loadIdColumns(java.sql.Statement sqlStatement) throws SQLException {
-        String database = sqlStatement.getConnection().getMetaData().getDatabaseProductName();
-        DatabaseType databaseType = DatabaseType.findByName(database);
-        
-        for (String tableName : tables) {
-            if (databaseType == DatabaseType.MYSQL || databaseType == DatabaseType.MARIADB) {
-                ResultSet rs = sqlStatement.executeQuery("DESCRIBE " + tableName);
-                while (rs.next()) {
-                    // TODO composite IDs?
-                    if ("PRI".equals(rs.getString("Key"))) {
-                        idColumns.put(tableName, rs.getString("Field"));
-                    }
-                }
-            } else if (databaseType == DatabaseType.POSTGRESQL) {
-                
-            } // TODO
-        }
-    }
-
     public SqlParseResult handleInsert(Statement stm) {
         SqlParseResult result = new SqlParseResult();
         
         Insert insert = (Insert) stm;
         List<Column> columns = ((Insert) stm).getColumns();
         if (columns == null || columns.isEmpty()) {
-            // if no columns are specified, fetch from database (and cache)
-            columns = new ArrayList<>();
+            // if no columns are specified, fetch from the metadata
+            columns = tableColumns.get(insert.getTable().getName())
+                    .stream().map(c -> new Column(insert.getTable(), c))
+                    .collect(Collectors.toList());
         }
         
         ItemsList items = insert.getItemsList();
@@ -166,6 +142,9 @@ public class SqlParser {
                 for (Expression expr : expressions) {
                     if (expr instanceof StringValue) {
                         values.add(((StringValue) expr).getValue()); 
+                    } else if (expr instanceof JdbcParameter) {
+                        // TODO consider adding the number and then extracting it in the PreparedStatement handler, instead of relying on ?
+                        values.add("?");
                     }
                 }
             }

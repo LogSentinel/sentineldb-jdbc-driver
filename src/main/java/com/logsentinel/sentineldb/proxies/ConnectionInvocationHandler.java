@@ -20,7 +20,7 @@ public class ConnectionInvocationHandler implements InvocationHandler {
     private SqlParser sqlParser;
     private LookupManager lookupManager;
     
-    ConnectionInvocationHandler(Connection connection, ExternalEncryptionService encryptionService, 
+    public ConnectionInvocationHandler(Connection connection, ExternalEncryptionService encryptionService, 
             AuditLogService auditLogService, SqlParser sqlParser, LookupManager lookupManager) {
         this.connection = connection;
         this.encryptionService = encryptionService;
