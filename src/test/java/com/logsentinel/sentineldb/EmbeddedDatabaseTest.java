@@ -78,9 +78,10 @@ public class EmbeddedDatabaseTest {
                     assertThat(rs.getString(2), equalTo("sensitive"));
                     assertThat(rs.getString(3), equalTo("sensitive_searchable"));
                     assertThat(rs.getString(4), equalTo("non_sensitive"));
+                    
                 }
-                
-             // then select them back to see if they will be received unencrypted
+
+                // then select them back to see if they will be received unencrypted
                 try (Statement stm = connRaw.createStatement()) {
                     ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
                     rs.next();
@@ -88,6 +89,17 @@ public class EmbeddedDatabaseTest {
                     assertThat(rs.getString(3), endsWith("sensitive_searchable_ENCRYPTED"));
                     assertThat(rs.getString(4), equalTo("non_sensitive"));
                     assertThat(rs.getString(5), equalTo(LOOKUP_KEY));
+                }
+                
+                // then check the WHERE clause
+                try (PreparedStatement pstm = conn2.prepareStatement("SELECT * FROM sensitive WHERE sensitive_searchable=?")) {
+                    pstm.setString(1, "sensitive_searchable");
+                    ResultSet rs = pstm.executeQuery();
+                    rs.next();
+                    assertThat(rs.getString(2), equalTo("sensitive"));
+                    assertThat(rs.getString(3), equalTo("sensitive_searchable"));
+                    assertThat(rs.getString(4), equalTo("non_sensitive"));
+
                 }
             }
         }
@@ -104,9 +116,10 @@ public class EmbeddedDatabaseTest {
     private ExternalEncryptionResult createEncryptionResult(Object plaintext, Object fieldName) {
         ExternalEncryptionResult result = new ExternalEncryptionResult();
         result.setCiphertext(plaintext + "_ENCRYPTED");
-        // TODO
         if (fieldName.equals("searchable_sensitive_field")) {
             result.setLookupKeys(Arrays.asList(LOOKUP_KEY));
+        } else {
+            result.setLookupKeys(Collections.emptyList());
         }
         return result;
     }

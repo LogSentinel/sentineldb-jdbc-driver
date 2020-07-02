@@ -10,6 +10,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 import com.logsentinel.sentineldb.AuditLogService;
 import com.logsentinel.sentineldb.ExternalEncryptionService;
 import com.logsentinel.sentineldb.LookupManager;
@@ -52,11 +54,15 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                     if (column.isWhereClause()) {
                         args[1] = encryptionService.getLookupKey((String) args[1]);
                     } else {
-                        // TODO store lookup keys
-                        args[1] = encryptionService.encryptString((String) args[1], 
+                        Pair<String, List<String>> encryptionResult = encryptionService.encryptString((String) args[1], 
                                 column.getTableName(), 
                                 column.getColumName(), 
-                                UUID.randomUUID()).getKey(); // check extended comment in StatementInvocationHandler
+                                UUID.randomUUID());
+                        args[1] = encryptionResult.getKey(); // check extended comment in StatementInvocationHandler
+                        
+                        // INSERT and UPDATE statements have non-where clause parameters whose lookup keys should be stored
+                        lookupManager.storeLookup(encryptionResult.getValue(), column.getTableName(), 
+                                column.getColumName(), parseResult.getIds(), preparedStatement.getConnection());
                     }
                 }
             }

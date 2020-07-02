@@ -5,6 +5,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
+import org.apache.commons.lang3.StringUtils;
+
 /**
  * Manages the lookup table. The lookup table has lookup_key=hash(encrypt(plaintext)) and 
  * target_id = the target id for each row in a table that has sensitive data.
@@ -21,13 +23,15 @@ public class LookupManager {
     
     private ExternalEncryptionService encryptionService;
     private Connection connection;
+    private TableMetadata tableMetadata;
     
-    public LookupManager(ExternalEncryptionService encryptionService, Connection connection) { 
+    public LookupManager(ExternalEncryptionService encryptionService, Connection connection, TableMetadata tableMetadata) { 
         this.encryptionService = encryptionService;
         this.connection = connection;
+        this.tableMetadata = tableMetadata;
     }
     
-    public void initLookup(List<String> tables) {
+    public void initLookup() {
         try {
             try (Statement stm = connection.createStatement()) {
                 stm.executeQuery("SELECT * FROM sentineldb_lookup LIMIT 1");
@@ -39,7 +43,7 @@ public class LookupManager {
             }
             
             try (Statement stm = connection.createStatement()) {
-                appendLookupColumn(tables, stm);
+                appendLookupColumn(tableMetadata.getTables(), stm);
             }
         } catch (SQLException e) {
             e.printStackTrace();
@@ -63,11 +67,16 @@ public class LookupManager {
     }
 
     public void storeLookup(List<String> lookupKeys, String table, String column, List<Object> ids, Connection connection) throws SQLException {
+        if (lookupKeys == null || lookupKeys.isEmpty()) {
+            return;
+        }
         try (Statement stm = connection.createStatement()) {
             // non-analyzed lookup keys are stored in additional columns in the same table 
             if (lookupKeys.size() == 1) {
-                stm.executeUpdate("UPDATE " + table + " SET column='" + lookupKeys.iterator().next() + "' WHERE "); // TODO idColumn IN (ids)
+                stm.executeUpdate("UPDATE " + table + " SET " + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + "='" 
+                        + lookupKeys.iterator().next() + "' WHERE " + tableMetadata.getIdColumns().get(table) + " IN (" + StringUtils.join(ids, ",") + ")");
             } else {
+                // TODO
                 // insert into lookup table, decartes multiplication (lookupKeys x ids)
             }
         }

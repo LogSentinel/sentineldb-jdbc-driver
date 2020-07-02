@@ -105,8 +105,6 @@ public class SentinelDBDriver implements Driver {
         
         Connection connection = delegatedDriver.connect(delegatedUrl, info);
         
-        LookupManager lookupManager = new LookupManager(encryptionService, connection);
-        
         try (Statement stm = connection.createStatement()) {
             // TODO periodically reload table data if we assume database changes can happen without an application restart?
             List<String> tables = listTables(stm);
@@ -114,8 +112,9 @@ public class SentinelDBDriver implements Driver {
             tableMetadata.setTables(tables);
             tableMetadata.setTableColumns(listTableColumns(tables, stm));
             tableMetadata.setIdColumns(listIdColumns(tables, stm));
-            
-            lookupManager.initLookup(tables);
+
+            LookupManager lookupManager = new LookupManager(encryptionService, connection, tableMetadata);
+            lookupManager.initLookup();
             
             return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] {Connection.class}, 
