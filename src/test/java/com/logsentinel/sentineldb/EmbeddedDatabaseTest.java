@@ -100,14 +100,6 @@ public class EmbeddedDatabaseTest {
                 }
             }
         }
-        
-            
-            // insert
-            // select
-            // update
-            // select
-            // delete
-            // select
     }
 
     public void testCurrentData(Connection conn2, Connection connRaw, String... args) throws SQLException {
