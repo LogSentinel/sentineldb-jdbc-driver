@@ -64,20 +64,17 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                                 UUID.randomUUID());
                         args[1] = encryptionResult.getKey(); // check extended comment in StatementInvocationHandler
 
-                        int position = (int) args[0];
-                        
                         if ((query.startsWith("INSERT") || query.startsWith("UPDATE")) 
                                 && encryptionResult.getValue() != null && !encryptionResult.getValue().isEmpty()) {
                             if (encryptionResult.getValue().size() > 1) {
+                                // TODO extract id values that are set as prepared statement parameters
                                 lookupManager.storeLookup(encryptionResult.getValue(), column.getTableName(), 
                                     column.getColumName(), parseResult.getIds(), preparedStatement.getConnection());
                             } else if (query.startsWith("UPDATE")){
                                 // UPDATE queries are modified with prepending the lookup columns, so we need to offset the position
                                 // with the number of prepended columns, and set the appropriate lookup value
-                                position += encryptionService.getSearchableEncryptedColumns(column.getTableName()).size();
-                                args[0] = position;
-                                preparedStatement.setString(searchableColumns.indexOf(column.getColumName()), 
-                                        encryptionResult.getValue().iterator().next());
+                                int idx = searchableColumns.indexOf(column.getColumName()) + 1;
+                                preparedStatement.setString(idx, encryptionResult.getValue().iterator().next());
                             } else if (query.startsWith("INSERT")) {
                                 // INSERT queries are modified with appending the lookup columns, so no need for offsetting,
                                 // we just need to set the appropriate lookup value
@@ -87,6 +84,9 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                         }
                     }
                 }
+            }
+            if (method.getName().startsWith("set")) {
+                offsetParamIndex(args);
             }
             result = method.invoke(preparedStatement, args);
         } catch (Exception ex) {
@@ -108,6 +108,15 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
             }
         }
         return result;
+    }
+
+    public void offsetParamIndex(Object[] args) {
+        // we have to offset all columns in UPDATE queries
+        if (query.startsWith("UPDATE")) {
+            int position = (int) args[0];
+            position += encryptionService.getSearchableEncryptedColumns(parseResult.getMainTable()).size();
+            args[0] = position;
+        }
     }
     
     private void extractIndexedParamColumnNames() {

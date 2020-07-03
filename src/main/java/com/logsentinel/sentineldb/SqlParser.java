@@ -75,6 +75,7 @@ public class SqlParser {
     private SqlParseResult handleDelete(Statement stm) {
         Delete delete = (Delete) stm;
         SqlParseResult result = new SqlParseResult();
+        result.setMainTable(delete.getTable().getName());
         delete.getWhere().accept(new WhereExpressionVisitor(result, Collections.emptyMap(), delete.getTable().getName(), idColumns));
         return result;
     }
@@ -91,6 +92,8 @@ public class SqlParser {
         SqlParseResult result = new SqlParseResult();
         
         Update update = (Update) stm;
+        result.setMainTable(update.getTable().getName());
+        
         List<Column> columns = update.getColumns();
         
         List<Expression> expressions = update.getExpressions();
@@ -98,6 +101,8 @@ public class SqlParser {
         for (Expression expr : expressions) {
             if (expr instanceof StringValue) {
                 values.add(((StringValue) expr).getValue()); 
+            } else if (expr instanceof JdbcParameter) {
+                values.add("?");
             }
         }
         
@@ -111,10 +116,14 @@ public class SqlParser {
         // we have to select all affected rows and get their ids
         if (result.getIds().isEmpty()) {
             // TODO handle prepared statements as well, meaning that setXxx has to be set to the synthetic select statement as well
-            String query = "SELECT " + idColumns.get(update.getTable().getName()) + " WHERE " + update.getWhere();
-            ResultSet resultSet = sqlStatement.executeQuery(query);
-            while (resultSet.next()) {
-                result.getIds().add(resultSet.getObject(1));
+            String query = "SELECT " + idColumns.get(update.getTable().getName().toLowerCase()) + " FROM " + update.getTable().getName() + " WHERE " + update.getWhere();
+            if (query.contains("=?") || query.contains("= ?")) {
+                // TODO handle prepared statements
+            } else {
+                ResultSet resultSet = sqlStatement.executeQuery(query);
+                while (resultSet.next()) {
+                    result.getIds().add(resultSet.getObject(1));
+                }
             }
         }
         
@@ -125,6 +134,8 @@ public class SqlParser {
         SqlParseResult result = new SqlParseResult();
         
         Insert insert = (Insert) stm;
+        result.setMainTable(insert.getTable().getName());
+        
         List<Column> columns = ((Insert) stm).getColumns();
         if (columns == null || columns.isEmpty()) {
             // if no columns are specified, fetch from the metadata
@@ -266,7 +277,7 @@ public class SqlParser {
 
         public void fetchIds(EqualsTo expr) {
             if (idColumns.containsKey(tableName)) {
-                String idColumnName = idColumns.get(tableName);
+                String idColumnName = idColumns.get(tableName.toLowerCase());
                 if (expr.getLeftExpression() instanceof Column) {
                     Column column = (Column) expr.getLeftExpression();
                     String columnName = getColumnName(column);
@@ -275,6 +286,8 @@ public class SqlParser {
                             result.getIds().add(((StringValue) expr.getRightExpression()).getValue());
                         } else if (expr.getRightExpression() instanceof LongValue) {
                             result.getIds().add(((LongValue) expr.getRightExpression()).getValue());
+                        } else if (expr.getRightExpression() instanceof JdbcParameter) {
+                            result.getIds().add("?");
                         }
                     }
                 }
@@ -291,6 +304,7 @@ public class SqlParser {
     }
     
     public static class SqlParseResult {
+        private String mainTable;
         private List<TableColumn> columns = new ArrayList<>();
         private List<TableColumn> whereColumns = new ArrayList<>();
         private List<Object> ids = new ArrayList<>();
@@ -312,6 +326,12 @@ public class SqlParser {
         }
         public void setIds(List<Object> ids) {
             this.ids = ids;
+        }
+        public String getMainTable() {
+            return mainTable;
+        }
+        public void setMainTable(String mainTable) {
+            this.mainTable = mainTable;
         }
     }
     

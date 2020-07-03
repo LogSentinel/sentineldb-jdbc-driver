@@ -209,7 +209,7 @@ public class SentinelDBDriver implements Driver {
                 while (rs.next()) {
                     // TODO composite IDs?
                     if ("PRI".equals(rs.getString("Key"))) {
-                        idColumns.put(tableName, rs.getString("Field"));
+                        idColumns.put(tableName.toLowerCase(), rs.getString("Field"));
                     }
                 }
             } else if (databaseType == DatabaseType.POSTGRESQL) {
@@ -219,7 +219,7 @@ public class SentinelDBDriver implements Driver {
                 while (rs.next()) {
                     // TODO composite IDs?
                     if ("PRI".equals(rs.getString("KEY"))) {
-                        idColumns.put(tableName, rs.getString("FIELD"));
+                        idColumns.put(tableName.toLowerCase(), rs.getString("FIELD"));
                     }
                 }
                 

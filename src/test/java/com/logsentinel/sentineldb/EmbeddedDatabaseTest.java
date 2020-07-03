@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,7 +57,7 @@ public class EmbeddedDatabaseTest {
         try (Connection connection = DriverManager.getConnection(CONNECTION_STRING)) {
             // DDL to create the table with sensitive data
             try (Statement stm = connection.createStatement()) {
-                stm.executeUpdate("CREATE TABLE sensitive (id int auto_increment NOT NULL, "
+                stm.executeUpdate("CREATE TABLE sensitive (id INT auto_increment PRIMARY KEY, "
                         + "sensitive_field VARCHAR(100), searchable_sensitive_field VARCHAR(100), non_sensitive_field VARCHAR(100))");
             }
             
@@ -72,36 +73,18 @@ public class EmbeddedDatabaseTest {
                     pstm.executeUpdate();
                 }
                 
-                // then select them back to see if they will be received unencrypted
-                try (Statement stm = conn2.createStatement()) {
-                    ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
-                    rs.next();
-                    assertThat(rs.getString(2), equalTo("sensitive"));
-                    assertThat(rs.getString(3), equalTo("sensitive_searchable"));
-                    assertThat(rs.getString(4), equalTo("non_sensitive"));
+                testCurrentData(conn2, connRaw, "sensitive", "sensitive_searchable", "non_sensitive");
+                
+                // then test an UPDATE query by ID 
+                try (PreparedStatement pstm = conn2.prepareStatement("UPDATE sensitive SET searchable_sensitive_field=?, sensitive_field=? WHERE id=?")) {
+                    pstm.setString(1, "sensitive_searchable2");
+                    pstm.setString(2, "sensitive2");
+                    pstm.setInt(3, 1);
                     
-                }
-
-                // then select them back to see if they will be received unencrypted
-                try (Statement stm = connRaw.createStatement()) {
-                    ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
-                    rs.next();
-                    assertThat(rs.getString(2), endsWith("sensitive_ENCRYPTED"));
-                    assertThat(rs.getString(3), endsWith("sensitive_searchable_ENCRYPTED"));
-                    assertThat(rs.getString(4), equalTo("non_sensitive"));
-                    assertThat(rs.getString(5), equalTo(LOOKUP_KEY));
+                    pstm.executeUpdate();
                 }
                 
-                // then check the WHERE clause
-                try (PreparedStatement pstm = conn2.prepareStatement("SELECT * FROM sensitive WHERE searchable_sensitive_field=?")) {
-                    pstm.setString(1, "sensitive_searchable");
-                    ResultSet rs = pstm.executeQuery();
-                    rs.next();
-                    assertThat(rs.getString(2), equalTo("sensitive"));
-                    assertThat(rs.getString(3), equalTo("sensitive_searchable"));
-                    assertThat(rs.getString(4), equalTo("non_sensitive"));
-
-                }
+                testCurrentData(conn2, connRaw, "sensitive2", "sensitive_searchable2", "non_sensitive");
             }
         }
         
@@ -112,6 +95,38 @@ public class EmbeddedDatabaseTest {
             // select
             // delete
             // select
+    }
+
+    public void testCurrentData(Connection conn2, Connection connRaw, String... args) throws SQLException {
+        // then select them back to see if they will be received unencrypted
+        try (Statement stm = conn2.createStatement()) {
+            ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
+            rs.next();
+            assertThat(rs.getString(2), equalTo(args[0]));
+            assertThat(rs.getString(3), equalTo(args[1]));
+            assertThat(rs.getString(4), equalTo(args[2]));
+            
+        }
+
+        // then select them without the proxy to see if they are stored encrypted
+        try (Statement stm = connRaw.createStatement()) {
+            ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
+            rs.next();
+            assertThat(rs.getString(2), endsWith(args[0] + "_ENCRYPTED"));
+            assertThat(rs.getString(3), endsWith(args[1] + "_ENCRYPTED"));
+            assertThat(rs.getString(4), equalTo(args[2]));
+            assertThat(rs.getString(5), equalTo(LOOKUP_KEY));
+        }
+        
+        // then check the WHERE clause
+        try (PreparedStatement pstm = conn2.prepareStatement("SELECT * FROM sensitive WHERE searchable_sensitive_field=?")) {
+            pstm.setString(1, "sensitive_searchable");
+            ResultSet rs = pstm.executeQuery();
+            rs.next();
+            assertThat(rs.getString(2), equalTo(args[0]));
+            assertThat(rs.getString(3), equalTo(args[1]));
+            assertThat(rs.getString(4), equalTo(args[2]));
+        }
     }
 
     private ExternalEncryptionResult createEncryptionResult(Object plaintext, Object fieldName) {
