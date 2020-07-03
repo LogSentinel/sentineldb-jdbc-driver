@@ -16,6 +16,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
@@ -50,7 +51,7 @@ public class EmbeddedDatabaseTest {
         when(mockClient.getExternalEncryptionActions()).thenReturn(externalEncryptionApi);
         when(mockClient.getSchemaActions()).thenReturn(schemaApi);
         when(externalEncryptionApi.encryptData(any(), anyString(), anyString(), anyString(), anyString())).thenAnswer(i -> createEncryptionResult(i.getArgument(4), i.getArgument(3)));
-        when(externalEncryptionApi.decryptData(anyString(), any(), anyString(), anyString())).thenAnswer(i -> i.getArgument(0).toString().replace("_ENCRYPTED", ""));
+        when(externalEncryptionApi.decryptData(anyString(), any(), anyString(), anyString())).thenAnswer(i -> new String(Base64.getDecoder().decode(i.getArgument(0).toString())));
         when(externalEncryptionApi.getLookupValue(any(), anyString())).thenReturn(LOOKUP_KEY);
         when(schemaApi.listSearchSchemas()).thenReturn(Collections.singletonList(createTestSchema()));
         
@@ -72,7 +73,6 @@ public class EmbeddedDatabaseTest {
                     pstm.setString(3, "non_sensitive");
                     pstm.executeUpdate();
                 }
-                
                 testCurrentData(conn2, connRaw, "sensitive", "sensitive_searchable", "non_sensitive");
                 
                 // then test an UPDATE query by ID 
@@ -83,8 +83,21 @@ public class EmbeddedDatabaseTest {
                     
                     pstm.executeUpdate();
                 }
-                
                 testCurrentData(conn2, connRaw, "sensitive2", "sensitive_searchable2", "non_sensitive");
+                
+                // then test an UPDATE with non-prepared statement 
+                try (Statement stm = conn2.createStatement()) {
+                    stm.executeUpdate("UPDATE sensitive SET searchable_sensitive_field='sensitive_searchable3', sensitive_field='sensitive3', non_sensitive_field='non_sensitive2' WHERE id=1");
+                }
+                
+                testCurrentData(conn2, connRaw, "sensitive3", "sensitive_searchable3", "non_sensitive2");
+                
+                // finally test a DELETE 
+                try (Statement stm = conn2.createStatement()) {
+                    stm.executeUpdate("DELETE FROM sensitive WHERE id=1");
+                    ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
+                    assertThat(rs.next(), equalTo(false));
+                }
             }
         }
         
@@ -112,8 +125,8 @@ public class EmbeddedDatabaseTest {
         try (Statement stm = connRaw.createStatement()) {
             ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
             rs.next();
-            assertThat(rs.getString(2), endsWith(args[0] + "_ENCRYPTED"));
-            assertThat(rs.getString(3), endsWith(args[1] + "_ENCRYPTED"));
+            assertThat(rs.getString(2), endsWith(Base64.getEncoder().encodeToString(args[0].getBytes())));
+            assertThat(rs.getString(3), endsWith(Base64.getEncoder().encodeToString(args[1].getBytes())));
             assertThat(rs.getString(4), equalTo(args[2]));
             assertThat(rs.getString(5), equalTo(LOOKUP_KEY));
         }
@@ -127,11 +140,20 @@ public class EmbeddedDatabaseTest {
             assertThat(rs.getString(3), equalTo(args[1]));
             assertThat(rs.getString(4), equalTo(args[2]));
         }
+        
+        // then check the WHERE clause without prepared sdtatement
+        try (Statement stm = conn2.createStatement()) {
+            ResultSet rs = stm.executeQuery("SELECT * FROM sensitive WHERE searchable_sensitive_field='sensitive_searchable'");
+            rs.next();
+            assertThat(rs.getString(2), equalTo(args[0]));
+            assertThat(rs.getString(3), equalTo(args[1]));
+            assertThat(rs.getString(4), equalTo(args[2]));
+        }
     }
 
     private ExternalEncryptionResult createEncryptionResult(Object plaintext, Object fieldName) {
         ExternalEncryptionResult result = new ExternalEncryptionResult();
-        result.setCiphertext(plaintext + "_ENCRYPTED");
+        result.setCiphertext(Base64.getEncoder().encodeToString(plaintext.toString().getBytes()));
         if (fieldName.equals("searchable_sensitive_field")) {
             result.setLookupKeys(Arrays.asList(LOOKUP_KEY));
         } else {

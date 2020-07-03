@@ -3,7 +3,6 @@ package com.logsentinel.sentineldb.proxies;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.List;
@@ -12,6 +11,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.logsentinel.sentineldb.AuditLogService;
+import com.logsentinel.sentineldb.DatabaseType;
 import com.logsentinel.sentineldb.ExternalEncryptionService;
 import com.logsentinel.sentineldb.LookupManager;
 import com.logsentinel.sentineldb.ResultUtils;
@@ -55,16 +55,26 @@ public class StatementInvocationHandler implements InvocationHandler {
                     
                     UUID encryptionRecordId = UUID.randomUUID();
                     if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
-                        Pair<String, List<String>> result = encryptionService.encryptString(query, column.getTableName(), column.getColumName(), encryptionRecordId);
-                        query = query.replace(column.getValue(), result.getLeft());
+                        Pair<String, List<String>> result = encryptionService.encryptString(column.getValue(), column.getTableName(), column.getColumName(), encryptionRecordId);
+                        query = query.replace(quote(column.getValue()), quote(result.getLeft()));
+                        // do the same in case double-quotes are enabled for MySQL
+                        DatabaseType dbType = DatabaseType.findByName(statement.getConnection().getMetaData().getDatabaseProductName());
+                        if (dbType == DatabaseType.MYSQL || dbType == DatabaseType.MARIADB) {
+                            query = query.replace(doubleQuote(column.getValue()), doubleQuote(result.getLeft()));
+                        }
                         lookupManager.storeLookup(result.getRight(), column.getTableName(), column.getColumName(), parseResult.getIds(), statement.getConnection());
                     }
                 }
     
                 for (TableColumn whereColumn : parseResult.getWhereColumns()) {
                     // replace: /where x="y"/where x_sentineldb_lookup=hash(enc(y))/ to make queries work
-                    query = query.replace(whereColumn.getValue(), encryptionService.getLookupKey(whereColumn.getValue()));
-                    query = query.replace(whereColumn.getColumName(), whereColumn.getColumName() + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX);
+                    query = query.replace(quote(whereColumn.getValue()), quote(encryptionService.getLookupKey(whereColumn.getValue())));
+                    DatabaseType dbType = DatabaseType.findByName(statement.getConnection().getMetaData().getDatabaseProductName());
+                    if (dbType == DatabaseType.MYSQL || dbType == DatabaseType.MARIADB) {
+                        query = query.replace(doubleQuote(whereColumn.getValue()), doubleQuote(encryptionService.getLookupKey(whereColumn.getValue())));
+                    }
+                    query = query.replace(whereColumn.getColumName() + "=", whereColumn.getColumName() + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX + "=");
+                    query = query.replace(whereColumn.getColumName() + " =", whereColumn.getColumName() + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX + " =");
                 }
                 args[0] = query;
             }
@@ -90,6 +100,13 @@ public class StatementInvocationHandler implements InvocationHandler {
             }
         }
         return result;
+    }
+    
+    private String quote(String string) {
+        return "'" + string + "'";
+    }
+    private String doubleQuote(String string) {
+        return "\"" + string + "\"";
     }
     
 }
