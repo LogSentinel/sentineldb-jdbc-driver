@@ -49,7 +49,7 @@ public class SqlParser {
         this.idColumns = tableMetadata.getIdColumns();
         this.tableColumns = tableMetadata.getTableColumns();
     }
-
+    
     public SqlParseResult parse(String query, Connection connection) {
         try (java.sql.Statement sqlStatement = connection.createStatement()) {
             Statement stm = CCJSqlParserUtil.parse(query);
@@ -235,8 +235,36 @@ public class SqlParser {
         
         @Override
         public void visit(EqualsTo expr) {
-            // only handle String fields for now
+            // fetch the ID of the current table
+            fetchIds(expr);
             
+            // only handle String and prepared statement params for now
+            if (expr.getRightExpression() instanceof StringValue || expr.getRightExpression() instanceof JdbcParameter) {
+                String value = null;
+                if (expr.getRightExpression() instanceof StringValue) {
+                    StringValue valueWrapper = (StringValue) expr.getRightExpression();
+                    value = valueWrapper.getValue();
+                } else if (expr.getRightExpression() instanceof JdbcParameter) {
+                    value = "?";
+                }
+                
+                if (expr.getLeftExpression() instanceof Column) {
+                    Column column = (Column) expr.getLeftExpression();
+                    String columnName = getColumnName(column);
+                    String currentTableName = tableName;
+                    if (column.getTable() != null && column.getTable().getName() != null) {
+                        currentTableName = column.getTable().getName();
+                    }
+                    if (aliases.containsKey(currentTableName)) {
+                        currentTableName = aliases.get(currentTableName); 
+                    }
+                    result.getWhereColumns().add(new TableColumn(currentTableName, columnName, value, true));
+                }
+            }
+            // TODO MySQL in standard mode uses " for strings and not for objects as in ANSI_SQL mode, so handle that
+        }
+
+        public void fetchIds(EqualsTo expr) {
             if (idColumns.containsKey(tableName)) {
                 String idColumnName = idColumns.get(tableName);
                 if (expr.getLeftExpression() instanceof Column) {
@@ -251,26 +279,6 @@ public class SqlParser {
                     }
                 }
             }
-            
-            if (expr.getRightExpression() instanceof StringValue) {
-                StringValue valueWrapper = (StringValue) expr.getRightExpression();
-                String value = valueWrapper.getValue();
-                
-                if (expr.getLeftExpression() instanceof Column) {
-                    Column column = (Column) expr.getLeftExpression();
-                    String columnName = getColumnName(column);
-                    String currentTableName = tableName;
-                    if (column.getTable() != null && column.getTable().getName() != null) {
-                        currentTableName = column.getTable().getName();
-                    }
-                    if (aliases.containsKey(currentTableName)) {
-                        currentTableName = aliases.get(currentTableName); 
-                    }
-                    result.getWhereColumns().add(new TableColumn(currentTableName, columnName, value, true));
-                }
-                
-            }
-            // TODO MySQL in standard mode uses " for strings and not for objects as in ANSI_SQL mode, so handle that
         }
 
         public String getColumnName(Column column) {

@@ -27,18 +27,18 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
     private AuditLogService auditLogService;
     private LookupManager lookupManager;
     private SqlParseResult parseResult;
-    private List<TableColumn> indexedParamColumns;
+    private List<TableColumn> paramColumnsByPosition;
+    private List<String> searchableColumns;
     
     public PreparedStatementInvocationHandler(PreparedStatement preparedStatement, String query, 
             ExternalEncryptionService encryptionService, AuditLogService auditLogService, 
-            SqlParser sqlParser, LookupManager lookupManager) throws SQLException {
+            SqlParser sqlParser, SqlParseResult preParseResult, LookupManager lookupManager) throws SQLException {
         this.preparedStatement = preparedStatement;
         this.query = query;
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
         this.lookupManager = lookupManager;
-        // TODO for INSERT INTO queries without a field list, there should be automatically appended (and set) as many values as there are additionally created columns 
-        this.parseResult = sqlParser.parse(query, preparedStatement.getConnection());
+        this.parseResult = preParseResult != null ? preParseResult : sqlParser.parse(query, preparedStatement.getConnection());
         extractIndexedParamColumnNames();
     }
 
@@ -47,8 +47,12 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         Object result = null;
         try {
             if (parseResult != null && method.getName().equals("setString")) {
-                TableColumn column = indexedParamColumns.get((int) args[0]);
-                if (encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
+                TableColumn column = paramColumnsByPosition.get((int) args[0]);
+                // modify the value for encrypted columns as well as for lookups
+                // the original query is modified prior to preparing the statement, 
+                // and encrypted columns in the WHERE clause are replaced with their lookup counterparts
+                if (column.getColumName().endsWith(LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX) 
+                        || encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
                     // in case the parameter is in the where clause, set the value to the lookup key
                     // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
                     if (column.isWhereClause()) {
@@ -59,10 +63,28 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                                 column.getColumName(), 
                                 UUID.randomUUID());
                         args[1] = encryptionResult.getKey(); // check extended comment in StatementInvocationHandler
+
+                        int position = (int) args[0];
                         
-                        // INSERT and UPDATE statements have non-where clause parameters whose lookup keys should be stored
-                        lookupManager.storeLookup(encryptionResult.getValue(), column.getTableName(), 
-                                column.getColumName(), parseResult.getIds(), preparedStatement.getConnection());
+                        if ((query.startsWith("INSERT") || query.startsWith("UPDATE")) 
+                                && encryptionResult.getValue() != null && !encryptionResult.getValue().isEmpty()) {
+                            if (encryptionResult.getValue().size() > 1) {
+                                lookupManager.storeLookup(encryptionResult.getValue(), column.getTableName(), 
+                                    column.getColumName(), parseResult.getIds(), preparedStatement.getConnection());
+                            } else if (query.startsWith("UPDATE")){
+                                // UPDATE queries are modified with prepending the lookup columns, so we need to offset the position
+                                // with the number of prepended columns, and set the appropriate lookup value
+                                position += encryptionService.getSearchableEncryptedColumns(column.getTableName()).size();
+                                args[0] = position;
+                                preparedStatement.setString(searchableColumns.indexOf(column.getColumName()), 
+                                        encryptionResult.getValue().iterator().next());
+                            } else if (query.startsWith("INSERT")) {
+                                // INSERT queries are modified with appending the lookup columns, so no need for offsetting,
+                                // we just need to set the appropriate lookup value
+                                preparedStatement.setString(paramColumnsByPosition.size() + searchableColumns.indexOf(column.getColumName()), 
+                                        encryptionResult.getValue().iterator().next());
+                            }
+                        }
                     }
                 }
             }
@@ -89,14 +111,20 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
     }
     
     private void extractIndexedParamColumnNames() {
-        indexedParamColumns = new ArrayList<>();
+        paramColumnsByPosition = new ArrayList<>();
+        searchableColumns = new ArrayList<>();
         List<TableColumn> allColumns = new ArrayList<>();
         allColumns.addAll(parseResult.getColumns());
         allColumns.addAll(parseResult.getWhereColumns());
-        indexedParamColumns.add(null); // add an empty zeroth element
+        paramColumnsByPosition.add(null); // add an empty zeroth element
         for (TableColumn column : allColumns) {
             if (column.getValue().equals("?")) {
-                indexedParamColumns.add(column);
+                paramColumnsByPosition.add(column);
+            }
+        }
+        for (TableColumn column : parseResult.getColumns()) {
+            if (encryptionService.getSearchableEncryptedColumns(column.getTableName()).contains(column.getColumName())) {
+                searchableColumns.add(column.getColumName());
             }
         }
     }

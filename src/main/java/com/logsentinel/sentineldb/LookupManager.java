@@ -67,18 +67,9 @@ public class LookupManager {
     }
 
     public void storeLookup(List<String> lookupKeys, String table, String column, List<Object> ids, Connection connection) throws SQLException {
-        if (lookupKeys == null || lookupKeys.isEmpty()) {
-            return;
-        }
         try (Statement stm = connection.createStatement()) {
-            // non-analyzed lookup keys are stored in additional columns in the same table 
-            if (lookupKeys.size() == 1) {
-                stm.executeUpdate("UPDATE " + table + " SET " + column + SENTINELDB_LOOKUP_COLUMN_SUFFIX + "='" 
-                        + lookupKeys.iterator().next() + "' WHERE " + tableMetadata.getIdColumns().get(table) + " IN (" + StringUtils.join(ids, ",") + ")");
-            } else {
-                // TODO
-                // insert into lookup table, decartes multiplication (lookupKeys x ids)
-            }
+            // TODO
+            // insert into lookup table, decartes multiplication (lookupKeys x ids)
         }
     }
 }

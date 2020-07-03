@@ -7,11 +7,17 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.List;
+import java.util.regex.Pattern;
+
+import org.apache.commons.lang3.StringUtils;
 
 import com.logsentinel.sentineldb.AuditLogService;
 import com.logsentinel.sentineldb.ExternalEncryptionService;
 import com.logsentinel.sentineldb.LookupManager;
 import com.logsentinel.sentineldb.SqlParser;
+import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
+import com.logsentinel.sentineldb.SqlParser.TableColumn;
 
 public class ConnectionInvocationHandler implements InvocationHandler {
     private Connection connection;
@@ -31,6 +37,12 @@ public class ConnectionInvocationHandler implements InvocationHandler {
     
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        // for prepared INSERT statements we need to add the lookup columns to be inserted together with the rest of the data
+        SqlParseResult preParseResult = null;
+        if (method.getReturnType() == PreparedStatement.class) {
+            preParseResult = handleQueryModifications(args);
+        }
+        
         Object result = method.invoke(connection, args);
         if (method.getReturnType() == Statement.class) {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
@@ -41,8 +53,44 @@ public class ConnectionInvocationHandler implements InvocationHandler {
             return Proxy.newProxyInstance(getClass().getClassLoader(), 
                     new Class[] { method.getReturnType() },
                     new PreparedStatementInvocationHandler((PreparedStatement) result, (String) args[0], 
-                            encryptionService, auditLogService, sqlParser, lookupManager));
+                            encryptionService, auditLogService, sqlParser, preParseResult, lookupManager));
         }
         return result;
+    }
+
+    public SqlParseResult handleQueryModifications(Object[] args) {
+        String query = (String) args[0];
+        // pre-parse the query in order to modify it before passing it to the target connection
+        SqlParseResult result = sqlParser.parse(query, connection);
+        // TODO return the parse result and pass it as optional parameter to the PreparedStatementInvHandler constructor to save double-parsing?
+        if (query.startsWith("INSERT")) {
+            List<String> lookupColumns = encryptionService.getSearchableEncryptedColumns(result.getColumns().iterator().next().getTableName());
+            // add the lookup columns to the insert. If there are no fields specified, the first replace won't change anything
+            query = query.replace(") VALUES", "," + StringUtils.join(lookupColumns
+                    .stream().map(c -> c + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX).iterator(), ',') + ") VALUES");
+            query = query.replace("?)", "?" + StringUtils.repeat(",?", lookupColumns.size()) + ")");
+            
+            args[0] = query;
+            return result;
+        } else if (query.startsWith("UPDATE")) {
+            List<String> lookupColumns = encryptionService.getSearchableEncryptedColumns(result.getColumns().iterator().next().getTableName());
+            query = query.replace("SET ", "SET " + StringUtils.join(lookupColumns
+                    .stream().map(c -> c + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX + "=?").iterator(), ',') + ",");
+            args[0] = query;
+            return result;
+        }
+        
+        // we have to replace the column names in the WHERE clause if lookups by encrypted values are to be used
+        if (query.contains(" WHERE ")) {
+            // TODO handle more complicated queries with subselects and multiple WHERE clauses
+            String[] parts = Pattern.compile(" WHERE ", Pattern.CASE_INSENSITIVE).split(query);
+            for (TableColumn whereColumn : result.getWhereColumns()) {
+                if (encryptionService.getSearchableEncryptedColumns(whereColumn.getTableName()).contains(whereColumn.getColumName())) {
+                    parts[1] = parts[1].replace(whereColumn.getColumName(), whereColumn.getColumName() + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX);
+                }
+            }
+            args[0] = parts[0] + " WHERE " + parts[1];
+        }
+        return null;
     }
 }

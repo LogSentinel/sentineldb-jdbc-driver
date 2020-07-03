@@ -50,6 +50,7 @@ public class EmbeddedDatabaseTest {
         when(mockClient.getSchemaActions()).thenReturn(schemaApi);
         when(externalEncryptionApi.encryptData(any(), anyString(), anyString(), anyString(), anyString())).thenAnswer(i -> createEncryptionResult(i.getArgument(4), i.getArgument(3)));
         when(externalEncryptionApi.decryptData(anyString(), any(), anyString(), anyString())).thenAnswer(i -> i.getArgument(0).toString().replace("_ENCRYPTED", ""));
+        when(externalEncryptionApi.getLookupValue(any(), anyString())).thenReturn(LOOKUP_KEY);
         when(schemaApi.listSearchSchemas()).thenReturn(Collections.singletonList(createTestSchema()));
         
         try (Connection connection = DriverManager.getConnection(CONNECTION_STRING)) {
@@ -92,7 +93,7 @@ public class EmbeddedDatabaseTest {
                 }
                 
                 // then check the WHERE clause
-                try (PreparedStatement pstm = conn2.prepareStatement("SELECT * FROM sensitive WHERE sensitive_searchable=?")) {
+                try (PreparedStatement pstm = conn2.prepareStatement("SELECT * FROM sensitive WHERE searchable_sensitive_field=?")) {
                     pstm.setString(1, "sensitive_searchable");
                     ResultSet rs = pstm.executeQuery();
                     rs.next();
