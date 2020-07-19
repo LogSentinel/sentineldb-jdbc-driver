@@ -12,16 +12,19 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.ExpressionVisitorAdapter;
 import net.sf.jsqlparser.expression.JdbcParameter;
 import net.sf.jsqlparser.expression.LongValue;
+import net.sf.jsqlparser.expression.NullValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
 import net.sf.jsqlparser.expression.operators.relational.ItemsList;
 import net.sf.jsqlparser.expression.operators.relational.ItemsListVisitorAdapter;
+import net.sf.jsqlparser.expression.operators.relational.LikeExpression;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
@@ -156,6 +159,8 @@ public class SqlParser {
                     } else if (expr instanceof JdbcParameter) {
                         // TODO consider adding the number and then extracting it in the PreparedStatement handler, instead of relying on ?
                         values.add("?");
+                    } else if (expr instanceof NullValue) {
+                        values.add(null);
                     }
                 }
             }
@@ -245,10 +250,19 @@ public class SqlParser {
         }
         
         @Override
+        public void visit(LikeExpression expr) {
+            visitExpression(expr);
+        }
+        
+        @Override
         public void visit(EqualsTo expr) {
+            visitExpression(expr);
+        }
+
+        public void visitExpression(BinaryExpression expr) {
             // fetch the ID of the current table
             fetchIds(expr);
-            
+
             // only handle String and prepared statement params for now
             if (expr.getRightExpression() instanceof StringValue || expr.getRightExpression() instanceof JdbcParameter) {
                 String value = null;
@@ -275,7 +289,7 @@ public class SqlParser {
             // TODO MySQL in standard mode uses " for strings and not for objects as in ANSI_SQL mode, so handle that
         }
 
-        public void fetchIds(EqualsTo expr) {
+        public void fetchIds(BinaryExpression expr) {
             if (idColumns.containsKey(tableName)) {
                 String idColumnName = idColumns.get(tableName.toLowerCase());
                 if (expr.getLeftExpression() instanceof Column) {

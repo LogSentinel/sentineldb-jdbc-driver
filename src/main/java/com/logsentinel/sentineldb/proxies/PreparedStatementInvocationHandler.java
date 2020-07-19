@@ -38,8 +38,14 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         this.encryptionService = encryptionService;
         this.auditLogService = auditLogService;
         this.lookupManager = lookupManager;
-        this.parseResult = preParseResult != null ? preParseResult : sqlParser.parse(query, preparedStatement.getConnection());
-        extractIndexedParamColumnNames();
+        
+        try {
+            this.parseResult = preParseResult != null ? preParseResult : sqlParser.parse(query, preparedStatement.getConnection());
+            extractIndexedParamColumnNames();
+        } catch (Exception ex) {
+            System.err.println("Failed to parse query " + query);
+            throw ex;
+        }
     }
 
     @Override
@@ -56,7 +62,8 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                     // in case the parameter is in the where clause, set the value to the lookup key
                     // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
                     if (column.isWhereClause()) {
-                        args[1] = encryptionService.getLookupKey((String) args[1]);
+                        String value = normalizeValue((String) args[1]);
+                        args[1] = encryptionService.getLookupKey(value);
                     } else {
                         Pair<String, List<String>> encryptionResult = encryptionService.encryptString((String) args[1], 
                                 column.getTableName(), 
@@ -90,6 +97,7 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
             }
             result = method.invoke(preparedStatement, args);
         } catch (Exception ex) {
+            System.out.println("Exception for query " + query);
             ex.printStackTrace();
             throw ex;
         } finally {
@@ -110,6 +118,17 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         return result;
     }
 
+    public String normalizeValue(String value) {
+        // handle LIKE syntax
+        if (value.startsWith("%")) {
+            value = value.substring(1);
+        }
+        if (value.endsWith("%")) {
+           value = value.substring(0, value.length() - 2); 
+        }
+        return value;
+    }
+
     public void offsetParamIndex(Object[] args) {
         // we have to offset all columns in UPDATE queries
         if (query.startsWith("UPDATE")) {
@@ -127,7 +146,7 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         allColumns.addAll(parseResult.getWhereColumns());
         paramColumnsByPosition.add(null); // add an empty zeroth element
         for (TableColumn column : allColumns) {
-            if (column.getValue().equals("?")) {
+            if (column.getValue() != null && column.getValue().equals("?")) {
                 paramColumnsByPosition.add(column);
             }
         }

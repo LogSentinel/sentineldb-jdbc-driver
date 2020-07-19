@@ -14,6 +14,7 @@ import com.logsentinel.model.ActorData;
 
 public class AuditLogService {
 
+    private static boolean reportedWarning = false;
     private String organizationId;
     private String secret;
     private String applicationId;
@@ -35,8 +36,9 @@ public class AuditLogService {
     public void init() {
         if (organizationId != null) {
             client = LogSentinelClientBuilder.create(applicationId, organizationId, secret).setBasePath(url).build();
-        } else {
-            System.out.println("Not using secure logging due to missing configuration properties trailsOrganizationId, trailsSecret and trailsApplicationId");
+        } else if (!reportedWarning) {
+            System.out.println("[WARN] Not using secure logging due to missing configuration properties trailsOrganizationId, trailsSecret and trailsApplicationId");
+            reportedWarning = true;
         }
     }
 

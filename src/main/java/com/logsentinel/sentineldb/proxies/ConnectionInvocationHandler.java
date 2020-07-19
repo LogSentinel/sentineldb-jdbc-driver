@@ -40,7 +40,12 @@ public class ConnectionInvocationHandler implements InvocationHandler {
         // for prepared INSERT statements we need to add the lookup columns to be inserted together with the rest of the data
         SqlParseResult preParseResult = null;
         if (method.getReturnType() == PreparedStatement.class) {
-            preParseResult = handleQueryModifications(args);
+            try {
+                preParseResult = handleQueryModifications(args);
+            } catch (Exception ex) {
+                System.err.println("Failed to parse insert query " + args[0]);
+                throw ex;
+            }
         }
         
         Object result = method.invoke(connection, args);

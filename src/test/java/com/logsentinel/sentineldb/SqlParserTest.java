@@ -68,6 +68,13 @@ public class SqlParserTest {
         assertThat(getList(result.getWhereColumns(), TableColumn::getColumName), hasItems("column2"));
         assertThat(getList(result.getWhereColumns(), TableColumn::getValue), hasItems("foo"));
     }
+    
+    @Test
+    public void selectWithLikeTest() {
+        SqlParseResult result = parser.parse("SELECT column2 FROM table WHERE column2 LIKE '%foo%'", connection);
+        assertThat(getList(result.getWhereColumns(), TableColumn::getColumName), hasItems("column2"));
+        assertThat(getList(result.getWhereColumns(), TableColumn::getValue), hasItems("%foo%"));
+    }
 
     @Test
     public void selectWithSubselectsTest() {
@@ -113,6 +120,11 @@ public class SqlParserTest {
         assertThat(result.getIds().iterator().next(), equalTo(2L));
     }
     
+    @Test
+    public void insertWithNullTest() {
+        String query = "insert query insert into owners (id, first_name, last_name, address, city, telephone) values (null, ?, ?, ?, ?, ?)";
+        parser.parse(query, connection);
+    }
     
     public List<String> getList(List<TableColumn> columns, Function<TableColumn, String> supplierFunction) {
         return columns.stream().map(supplierFunction).collect(Collectors.toList());
