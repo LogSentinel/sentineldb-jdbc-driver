@@ -1,5 +1,6 @@
 package com.logsentinel.sentineldb;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +101,11 @@ public class ExternalEncryptionService {
     }
     
     public List<String> getSearchableEncryptedColumns(String table) {
-        return indexedColumns.get(table.toLowerCase());
+        List<String> result = indexedColumns.get(table.toLowerCase());
+        if (result == null) {
+            return Collections.emptyList();
+        }
+        return result;
     }
     
     public boolean tableConstainsSensitiveData(String table) {
