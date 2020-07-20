@@ -98,6 +98,15 @@ public class EmbeddedDatabaseTest {
                     ResultSet rs = stm.executeQuery("SELECT * FROM sensitive");
                     assertThat(rs.next(), equalTo(false));
                 }
+                
+                // also test an out-of-order insert (columns ordered differently than in the schema definition)
+                try (PreparedStatement pstm = conn2.prepareStatement("INSERT INTO sensitive(searchable_sensitive_field, sensitive_field, non_sensitive_field) VALuES (?, ?, ?)")) {
+                    pstm.setString(1, "sensitive_searchable");
+                    pstm.setString(2, "sensitive");
+                    pstm.setString(3, "non_sensitive");
+                    pstm.executeUpdate();
+                }
+                testCurrentData(conn2, connRaw, "sensitive", "sensitive_searchable", "non_sensitive");
             }
         }
     }

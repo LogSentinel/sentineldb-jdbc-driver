@@ -8,7 +8,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -150,9 +152,20 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                 paramColumnsByPosition.add(column);
             }
         }
-        for (TableColumn column : parseResult.getColumns()) {
-            if (encryptionService.getSearchableEncryptedColumns(column.getTableName()).contains(column.getColumName())) {
-                searchableColumns.add(column.getColumName());
+
+        // for INSERT and UPDATE queries we need to preserve the order of the columns
+        if (query.toUpperCase().startsWith("INSERT") || query.toUpperCase().startsWith("UPDATE")) {
+            Set<String> queryColumnNames = parseResult.getColumns().stream().map(TableColumn::getColumName).collect(Collectors.toSet());
+            for (String column : encryptionService.getSearchableEncryptedColumns(parseResult.getMainTable())) {
+                if (queryColumnNames.contains(column)) {
+                    searchableColumns.add(column);
+                }
+            }
+        } else {
+            for (TableColumn column : parseResult.getColumns()) {
+                if (encryptionService.getSearchableEncryptedColumns(column.getTableName()).contains(column.getColumName())) {
+                    searchableColumns.add(column.getColumName());
+                }
             }
         }
     }

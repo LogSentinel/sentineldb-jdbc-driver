@@ -5,8 +5,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 
-import org.apache.commons.lang3.StringUtils;
-
 /**
  * Manages the lookup table. The lookup table has lookup_key=hash(encrypt(plaintext)) and 
  * target_id = the target id for each row in a table that has sensitive data.
