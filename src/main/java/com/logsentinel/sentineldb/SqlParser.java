@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
+
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
@@ -216,6 +218,9 @@ public class SqlParser {
                 @Override
                 public void visit(Table table) {
                     tableNameBuilder.append(table.getName());
+                    if (table.getAlias() != null && table.getAlias().getName() != null) {
+                        aliases.put(table.getAlias().getName(), table.getName());
+                    }
                 }
                 
                 @Override

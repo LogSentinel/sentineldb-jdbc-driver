@@ -37,7 +37,7 @@ public class ConnectionInvocationHandler implements InvocationHandler {
     
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        // for prepared INSERT statements we need to add the lookup columns to be inserted together with the rest of the data
+        // for prepared statements we need to add the lookup columns to be inserted together with the rest of the data
         SqlParseResult preParseResult = null;
         if (method.getReturnType() == PreparedStatement.class) {
             try {

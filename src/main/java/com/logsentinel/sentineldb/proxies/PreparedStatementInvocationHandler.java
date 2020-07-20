@@ -40,7 +40,6 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         this.lookupManager = lookupManager;
         
         try {
-            System.out.println(query);
             this.parseResult = preParseResult != null ? preParseResult : sqlParser.parse(query, preparedStatement.getConnection());
             extractIndexedParamColumnNames();
         } catch (Exception ex) {
