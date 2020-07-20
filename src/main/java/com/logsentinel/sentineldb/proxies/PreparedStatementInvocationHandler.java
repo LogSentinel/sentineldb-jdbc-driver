@@ -126,14 +126,14 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
             value = value.substring(1);
         }
         if (value.endsWith("%")) {
-           value = value.substring(0, value.length() - 2); 
+           value = value.substring(0, value.length() - 1); 
         }
         return value;
     }
 
     public void offsetParamIndex(Object[] args) {
         // we have to offset all columns in UPDATE queries
-        if (query.startsWith("UPDATE")) {
+        if (query.toUpperCase().startsWith("UPDATE")) {
             int position = (int) args[0];
             position += encryptionService.getSearchableEncryptedColumns(parseResult.getMainTable()).size();
             args[0] = position;
