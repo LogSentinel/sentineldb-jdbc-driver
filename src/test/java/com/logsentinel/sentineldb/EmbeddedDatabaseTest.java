@@ -51,7 +51,7 @@ public class EmbeddedDatabaseTest {
         when(mockClient.getExternalEncryptionActions()).thenReturn(externalEncryptionApi);
         when(mockClient.getSchemaActions()).thenReturn(schemaApi);
         when(externalEncryptionApi.encryptData(any(), anyString(), anyString(), anyString(), anyString())).thenAnswer(i -> createEncryptionResult(i.getArgument(4), i.getArgument(3)));
-        when(externalEncryptionApi.decryptData(anyString(), any(), anyString(), anyString())).thenAnswer(i -> new String(Base64.getDecoder().decode(i.getArgument(0).toString())));
+        when(externalEncryptionApi.decryptData(anyString(), any(), anyString(), anyString())).thenAnswer(i -> i.getArgument(0).toString());
         when(externalEncryptionApi.getLookupValue(any(), anyString())).thenReturn(LOOKUP_KEY);
         when(schemaApi.listSearchSchemas()).thenReturn(Collections.singletonList(createTestSchema()));
         
@@ -67,7 +67,7 @@ public class EmbeddedDatabaseTest {
                     Connection connRaw = DriverManager.getConnection(H2_CONNECTION_STRING)) {
                 
                 // first insert some mix of encrypted and non-encrypted fields
-                try (PreparedStatement pstm = conn2.prepareStatement("INSERT INTO sensitive(sensitive_field, searchable_sensitive_field, non_sensitive_field) VALUES (?, ?, ?)")) {
+                try (PreparedStatement pstm = conn2.prepareStatement("INSERT INTO sensitive(sensitive_field, searchable_sensitive_field, non_sensitive_field) VALuES (?, ?, ?)")) {
                     pstm.setString(1, "sensitive");
                     pstm.setString(2, "sensitive_searchable");
                     pstm.setString(3, "non_sensitive");

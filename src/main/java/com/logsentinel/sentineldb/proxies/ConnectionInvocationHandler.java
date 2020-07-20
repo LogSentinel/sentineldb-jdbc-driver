@@ -67,26 +67,27 @@ public class ConnectionInvocationHandler implements InvocationHandler {
         String query = (String) args[0];
         // pre-parse the query in order to modify it before passing it to the target connection
         SqlParseResult result = sqlParser.parse(query, connection);
-        // TODO return the parse result and pass it as optional parameter to the PreparedStatementInvHandler constructor to save double-parsing?
-        if (query.startsWith("INSERT")) {
+        if (query.toUpperCase().startsWith("INSERT")) {
             List<String> lookupColumns = encryptionService.getSearchableEncryptedColumns(result.getColumns().iterator().next().getTableName());
             // add the lookup columns to the insert. If there are no fields specified, the first replace won't change anything
-            query = query.replace(") VALUES", "," + StringUtils.join(lookupColumns
+            Pattern replacement = Pattern.compile("\\) VALUES", Pattern.CASE_INSENSITIVE);
+            query = replacement.matcher(query).replaceFirst("," + StringUtils.join(lookupColumns
                     .stream().map(c -> c + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX).iterator(), ',') + ") VALUES");
             query = query.replace("?)", "?" + StringUtils.repeat(",?", lookupColumns.size()) + ")");
             
             args[0] = query;
             return result;
-        } else if (query.startsWith("UPDATE")) {
+        } else if (query.toUpperCase().startsWith("UPDATE")) {
             List<String> lookupColumns = encryptionService.getSearchableEncryptedColumns(result.getColumns().iterator().next().getTableName());
-            query = query.replace("SET ", "SET " + StringUtils.join(lookupColumns
+            Pattern replacement = Pattern.compile("SET ", Pattern.CASE_INSENSITIVE);
+            query = replacement.matcher(query).replaceFirst("SET " + StringUtils.join(lookupColumns
                     .stream().map(c -> c + LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX + "=?").iterator(), ',') + ",");
             args[0] = query;
             return result;
         }
         
         // we have to replace the column names in the WHERE clause if lookups by encrypted values are to be used
-        if (query.contains(" WHERE ")) {
+        if (query.toUpperCase().contains(" WHERE ")) {
             // TODO handle more complicated queries with subselects and multiple WHERE clauses
             String[] parts = Pattern.compile(" WHERE ", Pattern.CASE_INSENSITIVE).split(query);
             for (TableColumn whereColumn : result.getWhereColumns()) {

@@ -1,5 +1,7 @@
 package com.logsentinel.sentineldb;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -93,7 +95,8 @@ public class ExternalEncryptionService {
         String id = ciphertextElements[2];
         String ciphertext = ciphertextElements[3];
         
-        return sentinelDBClient.getExternalEncryptionActions().decryptData(ciphertext, datastoreId, id, tableName.toLowerCase());
+        return new String(Base64.getDecoder().decode(
+                sentinelDBClient.getExternalEncryptionActions().decryptData(ciphertext, datastoreId, id, tableName.toLowerCase())), StandardCharsets.UTF_8);
     }
     
     public String getLookupKey(String plaintext) {

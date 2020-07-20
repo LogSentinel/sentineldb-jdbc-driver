@@ -40,6 +40,7 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
         this.lookupManager = lookupManager;
         
         try {
+            System.out.println(query);
             this.parseResult = preParseResult != null ? preParseResult : sqlParser.parse(query, preparedStatement.getConnection());
             extractIndexedParamColumnNames();
         } catch (Exception ex) {
@@ -57,7 +58,7 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                 // modify the value for encrypted columns as well as for lookups
                 // the original query is modified prior to preparing the statement, 
                 // and encrypted columns in the WHERE clause are replaced with their lookup counterparts
-                if (column.getColumName().endsWith(LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX) 
+                if (column.getColumName().toLowerCase().endsWith(LookupManager.SENTINELDB_LOOKUP_COLUMN_SUFFIX) 
                         || encryptionService.isEncrypted(column.getTableName(), column.getColumName())) {
                     // in case the parameter is in the where clause, set the value to the lookup key
                     // otherwise (e.g. UPDATE table SET x=?), set it to the encrypted value
@@ -71,18 +72,18 @@ public class PreparedStatementInvocationHandler implements InvocationHandler {
                                 UUID.randomUUID());
                         args[1] = encryptionResult.getKey(); // check extended comment in StatementInvocationHandler
 
-                        if ((query.startsWith("INSERT") || query.startsWith("UPDATE")) 
+                        if ((query.toUpperCase().startsWith("INSERT") || query.toUpperCase().startsWith("UPDATE")) 
                                 && encryptionResult.getValue() != null && !encryptionResult.getValue().isEmpty()) {
                             if (encryptionResult.getValue().size() > 1) {
                                 // TODO extract id values that are set as prepared statement parameters
                                 lookupManager.storeLookup(encryptionResult.getValue(), column.getTableName(), 
                                     column.getColumName(), parseResult.getIds(), preparedStatement.getConnection());
-                            } else if (query.startsWith("UPDATE")){
+                            } else if (query.toUpperCase().startsWith("UPDATE")){
                                 // UPDATE queries are modified with prepending the lookup columns, so we need to offset the position
                                 // with the number of prepended columns, and set the appropriate lookup value
                                 int idx = searchableColumns.indexOf(column.getColumName()) + 1;
                                 preparedStatement.setString(idx, encryptionResult.getValue().iterator().next());
-                            } else if (query.startsWith("INSERT")) {
+                            } else if (query.toUpperCase().startsWith("INSERT")) {
                                 // INSERT queries are modified with appending the lookup columns, so no need for offsetting,
                                 // we just need to set the appropriate lookup value
                                 preparedStatement.setString(paramColumnsByPosition.size() + searchableColumns.indexOf(column.getColumName()), 

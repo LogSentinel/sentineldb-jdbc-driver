@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -14,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,7 @@ import org.mockito.MockitoAnnotations;
 
 import com.logsentinel.sentineldb.SqlParser.SqlParseResult;
 import com.logsentinel.sentineldb.SqlParser.TableColumn;
+import com.logsentinel.sentineldb.proxies.ConnectionInvocationHandler;
 
 public class SqlParserTest {
 
@@ -121,9 +124,30 @@ public class SqlParserTest {
     }
     
     @Test
+    public void aliasLowercaseLikeTest() {
+        String query = "select distinct owner0_.id as id1_0_0_, pets1_.id as id1_1_1_, owner0_.first_name as first_na2_0_0_, owner0_.last_name as last_nam3_0_0_, owner0_.address as address4_0_0_, owner0_.city as city5_0_0_, owner0_.telephone as telephon6_0_0_, pets1_.name as name2_1_1_, pets1_.birth_date as birth_da3_1_1_, pets1_.owner_id as owner_id4_1_1_, pets1_.type_id as type_id5_1_1_, pets1_.owner_id as owner_id4_1_0__, pets1_.id as id1_1_0__ from owners owner0_ left outer join pets pets1_ on owner0_.id=pets1_.owner_id WHERE owner0_.last_name like ?";
+        SqlParseResult result = parser.parse(query, connection);
+        assertThat(result.getWhereColumns().stream().anyMatch(c -> c.getColumName().equals("last_name")), equalTo(true));
+    }
+    
+    @Test
     public void insertWithNullTest() {
-        String query = "insert query insert into owners (id, first_name, last_name, address, city, telephone) values (null, ?, ?, ?, ?, ?)";
-        parser.parse(query, connection);
+        String query = "insert into owners (id, first_name, last_name, address, city, telephone) values (null, ?, ?, ?, ?, ?)";
+        SqlParseResult result = parser.parse(query, connection);
+        assertThat(getList(result.getColumns(), TableColumn::getColumName), hasItems("id", "first_name", "last_name", "address", "city", "telephone"));
+        assertThat(getList(result.getColumns(), TableColumn::getValue), hasItems(null, "?", "?", "?", "?"));
+        assertThat(getList(result.getColumns(), TableColumn::getTableName), hasItems("owners"));
+    }
+    
+    @Test
+    public void queryPreparsingTest() {
+        String query = "select distinct owner0_.id as id1_0_0_, pets1_.id as id1_1_1_, owner0_.first_name as first_na2_0_0_, owner0_.last_name as last_nam3_0_0_, owner0_.address as address4_0_0_, owner0_.city as city5_0_0_, owner0_.telephone as telephon6_0_0_, pets1_.name as name2_1_1_, pets1_.birth_date as birth_da3_1_1_, pets1_.owner_id as owner_id4_1_1_, pets1_.type_id as type_id5_1_1_, pets1_.owner_id as owner_id4_1_0__, pets1_.id as id1_1_0__ from owners owner0_ left outer join pets pets1_ on owner0_.id=pets1_.owner_id WHERE owner0_.last_name like ?";
+        ExternalEncryptionService encryptionService = mock(ExternalEncryptionService.class);
+        when(encryptionService.getSearchableEncryptedColumns(any())).thenReturn(Collections.singletonList("last_name"));
+        ConnectionInvocationHandler handler = new ConnectionInvocationHandler(connection, encryptionService, null, parser, null);
+        Object[] args = new Object[] {query};
+        handler.handleQueryModifications(args);
+        assertThat(args[0].toString().endsWith("owner0_.last_name_sentineldb_lookup like ?"), equalTo(true));
     }
     
     public List<String> getList(List<TableColumn> columns, Function<TableColumn, String> supplierFunction) {
