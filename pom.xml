@@ -44,7 +44,7 @@
 		<maven.compiler.target>${java.version}</maven.compiler.target>
 		<swagger-core-version>1.5.12</swagger-core-version>
 		<jersey-version>2.29</jersey-version>
-		<jackson-version>2.10.3</jackson-version>
+		<jackson-version>2.13.4.1</jackson-version>
 		<maven-plugin-version>1.0.0</maven-plugin-version>
 		<junit-version>4.12</junit-version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
